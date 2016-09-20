@@ -19,7 +19,7 @@
 #include <periph/gpio.h>
 
 // 1 second, defined in us
-#define OFF_INTERVAL (5*RTT_FREQUENCY)
+#define OFF_INTERVAL (RTT_FREQUENCY)
 #define NETWORK_RTT_US 1000000
 #define ON_INTERVAL (1000000UL)
 void cb(void* arg);
