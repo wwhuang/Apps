@@ -2,6 +2,7 @@ APPLICATION = low_power_test
 RIOTBASE ?= $(CURDIR)/../..
 BOARD ?= hamilton
 USEMODULE += rtt_stdio
+CFLAGS += -DRTT_STDIO_DISABLE_STDIN
 #CFLAGS += -DRTT_STDIO_ENABLE_BLOCKING_STDOUT
 
 # Radio
