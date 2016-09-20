@@ -59,18 +59,18 @@ void cb(void* arg) {
 void periodic_task(void* arg) {
 	uint32_t now;
     uint32_t i =0; //uint32_t last_wakeup = xtimer_now();
-	printf("0\n");
-    while (i < 1000000) {
+	//printf("0\n");
+    while (i < 1000) {
 		i++;
 	}
     //xtimer_periodic_wakeup(&last_wakeup, ON_INTERVAL);
 	//lpm_end_awake();
-	printf("1\n");
+	//printf("1\n");
 	now = rtt_get_counter() + OFF_INTERVAL;
-	printf("2\n");
+	//printf("2\n");
 	now = (now > RTT_MAX_VALUE) ? now - RTT_MAX_VALUE : now;
 
-	printf("next wakeup: %lu\n", now);
+	//printf("next wakeup: %lu\n", now);
     //printf("sleep mode %u\n", lpm_set(LPM_OFF));
     rtt_set_alarm(now, cb, 0);
     //lpm_set(LPM_OFF);   
@@ -80,6 +80,8 @@ int main(void)
 {
     low_power_init();
     periodic_task(0);
-
+    while(1) {
+    	xtimer_usleep(1000000U);
+    }
     return 0;
 }
