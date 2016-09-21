@@ -43,6 +43,9 @@ void low_power_init(void) {
       printf("Failed to init ACC\n");
     if (mma7660_set_mode(&acc, 0, 0, 0, 0) != 0)
       printf("Failed to set idle mode\n");    
+	if (mma7660_config_samplerate(&acc, MMA7660_SR_AM64, MMA7660_SR_AW32, 1) != 0)
+      printf("Failed to config SR\n");
+    
 
     printf("Sensors Off\n");
     rtt_init();   
@@ -59,14 +62,12 @@ void cb(void* arg) {
 
 	at30ts74_read(&tmp, &temp);
 
-    if (mma7660_set_mode(&acc, 1, 0, 0, 0) != 0)
+    /*if (mma7660_set_mode(&acc, 1, 0, 0, 0) != 0)
     	printf("Failed to set active mode\n"); 
-    /*if (mma7660_config_samplerate(&acc, MMA7660_SR_AM64, MMA7660_SR_AW32, 1) != 0)
-      printf("Failed to config SR\n");*/
     if (mma7660_read(&acc, &x, &y, &z))
 		printf("Faile to read accel\n");    
     if (mma7660_set_mode(&acc, 0, 0, 0, 0) != 0)
-    	printf("Failed to set idle mode\n"); 
+    	printf("Failed to set idle mode\n"); */
 
 	printf("[** temperature: %luC / accel %d %d %d **]\n",
 			temp, x, y, z);
