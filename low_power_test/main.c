@@ -19,11 +19,14 @@
 #include <periph/gpio.h>
 
 // 1 second, defined in us
-#define OFF_INTERVAL (5*RTT_FREQUENCY)
+#define OFF_INTERVAL (RTT_FREQUENCY)
 #define NETWORK_RTT_US 1000000
 #define ON_INTERVAL (1000000UL)
 void cb(void* arg);
 void periodic_task(void* arg);
+xtimer_t * timer;
+at30ts74_t tmp;
+mma7660_t acc;
 
 void low_power_init(void) {
 
@@ -32,54 +35,62 @@ void low_power_init(void) {
     gpio_write(GPIO_PIN(0, 28), 1); 
     
     // Temperature sensor off
-    at30ts74_t tmp;
     if (at30ts74_init(&tmp, I2C_0, AT30TS74_ADDR, AT30TS74_12BIT) != 0)
         printf("Failed to init TEMP\n");
     
     // Accelerometer off
-    mma7660_t acc;
     if (mma7660_init(&acc, I2C_0, MMA7660_ADDR) != 0)
       printf("Failed to init ACC\n");
     if (mma7660_set_mode(&acc, 0, 0, 0, 0) != 0)
       printf("Failed to set idle mode\n");    
- 
+
     printf("Sensors Off\n");
     rtt_init();   
-    printf("RTT initialization (%u %u)\n", RTT_FREQUENCY, RTT_MAX_VALUE);
-    
-    // CPU idle (main clock is active)    
+    printf("RTT initialization (%u %u)\n", RTT_FREQUENCY, RTT_MAX_VALUE);    
 }
 
 void cb(void* arg) {
-	printf("call back\n");
-    //clk_init();
+	int32_t temp = 0;
+	int8_t x = 0;
+	int8_t y = 0;
+	int8_t z = 0;
+
+	printf("[%lu] Sensing starts\n", rtt_get_counter());
+
+	at30ts74_read(&tmp, &temp);
+
+    if (mma7660_set_mode(&acc, 1, 0, 0, 0) != 0)
+    	printf("Failed to set active mode\n"); 
+    /*if (mma7660_config_samplerate(&acc, MMA7660_SR_AM64, MMA7660_SR_AW32, 1) != 0)
+      printf("Failed to config SR\n");*/
+    if (mma7660_read(&acc, &x, &y, &z))
+		printf("Faile to read accel\n");    
+    if (mma7660_set_mode(&acc, 0, 0, 0, 0) != 0)
+    	printf("Failed to set idle mode\n"); 
+
+	printf("[** temperature: %luC / accel %d %d %d **]\n",
+			temp, x, y, z);
+
 	periodic_task(0);
 }
 
 void periodic_task(void* arg) {
 	uint32_t now;
-    uint32_t i =0; //uint32_t last_wakeup = xtimer_now();
-	printf("0\n");
-    while (i < 1000000) {
-		i++;
-	}
-    //xtimer_periodic_wakeup(&last_wakeup, ON_INTERVAL);
-	//lpm_end_awake();
-	printf("1\n");
-	now = rtt_get_counter() + OFF_INTERVAL;
-	printf("2\n");
-	now = (now > RTT_MAX_VALUE) ? now - RTT_MAX_VALUE : now;
 
-	printf("next wakeup: %lu\n", now);
-    //printf("sleep mode %u\n", lpm_set(LPM_OFF));
+	now = rtt_get_counter() + OFF_INTERVAL;
+	now = (now > RTT_MAX_VALUE) ? now - RTT_MAX_VALUE : now;
+	printf("[%lu] sleep\n\n", rtt_get_counter());
     rtt_set_alarm(now, cb, 0);
-    //lpm_set(LPM_OFF);   
 }
 
 int main(void)
 {
     low_power_init();
     periodic_task(0);
+
+	while (1) {	
+		xtimer_usleep(1000000UL);
+	}
 
     return 0;
 }
