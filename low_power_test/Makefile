@@ -12,7 +12,7 @@ USEMODULE += at30ts74 # temperature sensor
 USEMODULE += mma7660 # accelerometer
 
 # Real-time counter (RTC) for low power mode
-FEATURES_REQUIRED = periph_rtt
+#FEATURES_REQUIRED = periph_rtt
 # 
 USEMODULE += xtimer
 
