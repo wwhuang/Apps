@@ -27,11 +27,13 @@ static msg_t _main_msg_queue[MAIN_QUEUE_SIZE];
 
 uint16_t ms_seqno = 0;
 
+#define XOR_OFFSET 3
+
 typedef struct __attribute__((packed))
 {
   uint8_t type;
-  uint16_t build;
   uint16_t seqno;
+  uint16_t build;
   uint16_t cal_pulse;
   uint16_t calres[4];
   uint64_t uptime;
@@ -60,18 +62,19 @@ void tx_measure(asic_tetra_t *a, measurement_t *m)
   msz[msi].uptime = m->uptime;
   msz[msi].primary = m->primary;
   msz[msi].type = msi+10;
-  send_udp("ff02::2",4747,(uint8_t*)&(msz[msi]),sizeof(measure_set_t));
-  memset(xorbuf, 0, sizeof(measure_set_t)-1);
+  send_udp("ff02::1",4747,(uint8_t*)&(msz[msi]),sizeof(measure_set_t));
+  memset(xorbuf+XOR_OFFSET, 0, sizeof(measure_set_t)-XOR_OFFSET);
+  memcpy(xorbuf, (uint8_t*)&msz[msi], XOR_OFFSET);
   for(int i = 0; i < MSI_MAX; i++)
   {
     uint8_t *paybuf = ((uint8_t*)&msz[i]);
-    for (int k = 1; k < sizeof(measure_set_t);k++)
+    for (int k = XOR_OFFSET; k < sizeof(measure_set_t);k++)
     {
       xorbuf[k] ^= paybuf[k];
     }
   }
   xorbuf[0] = 0x55;
-  send_udp("ff02::2",4747,xorbuf,sizeof(measure_set_t));
+  send_udp("ff02::1",4747,xorbuf,sizeof(measure_set_t));
 }
 void initial_program(asic_tetra_t *a)
 {
@@ -82,8 +85,13 @@ void initial_program(asic_tetra_t *a)
   for (int i = 0; i < 4; i ++)
   {
     e = asic_program(a, i);
-    if (e) bad = 1;
     printf("[init] program pass 1 for %d code was %d\n", i, e);
+  }
+  for (int i = 0; i < 4; i ++)
+  {
+    e = asic_program(a, i);
+    if (e) bad = 1;
+    printf("[init] program pass 2 for %d code was %d\n", i, e);
   }
   xtimer_usleep(100000); //100ms
   for (int i = 0; i < 4; i ++)
