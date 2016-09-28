@@ -3,7 +3,7 @@ RIOTBASE ?= $(CURDIR)/../..
 BOARD ?= hamilton
 USEMODULE += xtimer
 USEMODULE += rtt_stdio
-CFLAGS += -DRTT_STDIO_ENABLE_BLOCKING_STDOUT -DKERNEL_CONF_STACKSIZE_MAIN=2048
+#CFLAGS += -DRTT_STDIO_ENABLE_BLOCKING_STDOUT
 
 # Radio
 USEMODULE += at86rf233
@@ -35,7 +35,7 @@ USEMODULE += netstats_ipv6
 # Comment this out to disable code in RIOT that does safety checking
 # which is not needed in a production environment but helps in the
 # development process:
-CFLAGS += -DDEVELHELP
+# CFLAGS += -DDEVELHELP
 
 DEFAULT_CHANNEL ?= 22
 CFLAGS += -DDEFAULT_CHANNEL=$(DEFAULT_CHANNEL)
