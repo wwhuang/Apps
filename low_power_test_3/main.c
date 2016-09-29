@@ -45,12 +45,9 @@ void low_power_init(void) {
       printf("Failed to set idle mode\n");
 	if (mma7660_config_samplerate(&acc, MMA7660_SR_AM64, MMA7660_SR_AW32, 1) != 0)
       printf("Failed to config SR\n");
-    printf("Sensors Off\n");
 
 	// Radio set
 	radio_num = gnrc_netif_get(radio);
-	//radio = (gnrc_netreg_lookup(GNRC_NETTYPE_LINK, GNRC_NETREG_DEMUX_CTX_ALL))->pid;
-    printf("Radio off\n");
 
 }
 
