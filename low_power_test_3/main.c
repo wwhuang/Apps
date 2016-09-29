@@ -24,7 +24,8 @@ void cb(void* arg);
 xtimer_t * timer;
 at30ts74_t tmp;
 mma7660_t acc;
-kernel_pid_t radio;
+kernel_pid_t radio[GNRC_NETIF_NUMOF];
+uint8_t radio_num;
 
 
 void low_power_init(void) {
@@ -47,7 +48,8 @@ void low_power_init(void) {
     printf("Sensors Off\n");
 
 	// Radio set
-	radio = (gnrc_netreg_lookup(GNRC_NETTYPE_LINK, GNRC_NETREG_DEMUX_CTX_ALL))->pid;
+	radio_num = gnrc_netif_get(radio);
+	//radio = (gnrc_netreg_lookup(GNRC_NETTYPE_LINK, GNRC_NETREG_DEMUX_CTX_ALL))->pid;
     printf("Radio off\n");
 
 }
@@ -58,6 +60,7 @@ void cb(void* arg) {
 	int8_t x = 0;
 	int8_t y = 0;
 	int8_t z = 0;
+	uint8_t i = 0;
 
 	printf("[%lu] Sensing starts\n",  xtimer_usec_from_ticks(xtimer_now()));
 
@@ -74,9 +77,11 @@ void cb(void* arg) {
 			temp, x, y, z);
 
 	netopt_state_t radio_state = NETOPT_STATE_IDLE;
-	gnrc_netapi_set(radio, NETOPT_STATE, 0, &radio_state, sizeof(netopt_state_t));
+	for (i=0; i < radio_num; i++)
+		gnrc_netapi_set(radio[i], NETOPT_STATE, 0, &radio_state, sizeof(netopt_state_t));
 	radio_state = NETOPT_STATE_SLEEP;
-	gnrc_netapi_set(radio, NETOPT_STATE, 0, &radio_state, sizeof(netopt_state_t));
+	for (i=0; i < radio_num; i++)
+		gnrc_netapi_set(radio[i], NETOPT_STATE, 0, &radio_state, sizeof(netopt_state_t));
 
 }
 
