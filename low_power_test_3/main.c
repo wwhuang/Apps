@@ -25,7 +25,6 @@ xtimer_t * timer;
 at30ts74_t tmp;
 mma7660_t acc;
 kernel_pid_t radio;
-netopt_state_t radio_state;
 
 
 void low_power_init(void) {
@@ -47,14 +46,11 @@ void low_power_init(void) {
       printf("Failed to config SR\n");
     printf("Sensors Off\n");
 
-	// Radio off
-	radio = gnrc_netdev2_getRadioID(0);
-	radio_state = NETOPT_STATE_SLEEP;
-	gnrc_netapi_set(radio, NETOPT_STATE, 0, &radio_state, sizeof(netopt_state_t));
+	// Radio set
+	radio = (gnrc_netreg_lookup(GNRC_NETTYPE_LINK, GNRC_NETREG_DEMUX_CTX_ALL))->pid;
     printf("Radio off\n");
-		
-}
 
+}
 
 void cb(void* arg) {
 
@@ -77,7 +73,7 @@ void cb(void* arg) {
 	printf("[%lu] temperature: %luC / accel %d %d %d\n", xtimer_usec_from_ticks(xtimer_now()),
 			temp, x, y, z);
 
-	radio_state = NETOPT_STATE_IDLE;
+	netopt_state_t radio_state = NETOPT_STATE_IDLE;
 	gnrc_netapi_set(radio, NETOPT_STATE, 0, &radio_state, sizeof(netopt_state_t));
 	radio_state = NETOPT_STATE_SLEEP;
 	gnrc_netapi_set(radio, NETOPT_STATE, 0, &radio_state, sizeof(netopt_state_t));
