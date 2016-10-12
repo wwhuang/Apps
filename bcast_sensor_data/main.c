@@ -33,7 +33,7 @@ void server(void)
   msg_t msg;
   msg_t msg_queue[16];
   msg_init_queue(msg_queue, 16);
-  uint32_t led_sleep;
+  xtimer_ticks32_t led_sleep;
 
   union value2 {int32_t number; uint8_t bytes[2];} message_num;
   union value4 {int32_t number; uint8_t bytes[4];} temperature_value ;
@@ -44,6 +44,13 @@ void server(void)
   if (gnrc_netreg_register(GNRC_NETTYPE_UDP, &entry)) {
     printf("ERROR listening\n");
   }
+
+  // turn radio on
+  kernel_pid_t radio[GNRC_NETIF_NUMOF];
+  uint8_t radio_num = gnrc_netif_get(radio);
+  netopt_state_t radio_state = NETOPT_STATE_IDLE;
+  for (int i=0; i < radio_num; i++)
+  gnrc_netapi_set(radio[i], NETOPT_STATE, 0, &radio_state, sizeof(netopt_state_t));
 
   printf("start listening for packets\n");
   while(1) // server loop
@@ -129,7 +136,7 @@ void client(void)
       printf("Failed to config SR\n");
     }
 
-    uint32_t last_wakeup;
+    xtimer_ticks32_t last_wakeup;
     int res;
     last_wakeup = xtimer_now();
     union value2 {int32_t number; uint8_t bytes[2];} message_num;
