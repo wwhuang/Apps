@@ -16,6 +16,8 @@
 #include <mma7660.h>
 #include <periph/gpio.h>
 #include <periph/i2c.h>
+#include "cmsis/samd21/include/instance/adc.h"
+//#include "cmsis/samd21/include/component/adc.h"
 
 // 1 second, defined in us
 #define INTERVAL (1000000U)
@@ -164,6 +166,66 @@ void cbe_demo(void)
   }
 }
 
+void test_adc(void)
+{
+    // default config?
+    REG_PM_APBCMASK |= PM_APBCMASK_ADC;    
+    REG_GCLK_CLKCTRL=(GCLK_CLKCTRL_CLKEN)|(GCLK_CLKCTRL_GEN_GCLK2)|(GCLK_CLKCTRL_ID_ADC);//4MHz
+
+    // disable ADC module
+    printf("disable ADC module\n");
+    REG_ADC_CTRLA &= ~(ADC_CTRLA_ENABLE);
+    while (REG_ADC_STATUS & ADC_STATUS_SYNCBUSY);
+
+    // software reset
+    printf("software reset ADC module\n");
+    REG_ADC_CTRLA = ADC_CTRLA_SWRST;
+    while ((REG_ADC_STATUS & ADC_STATUS_SYNCBUSY) || (REG_ADC_CTRLA & ADC_CTRLA_SWRST));
+
+    // ADC input setting, AIN06 (PA06?)
+    printf("configure adc input\n");
+    PORT->Group[0].PINCFG[6].reg = PORT_PINCFG_PMUXEN; //PA6, pin7
+    PORT->Group[0].PMUX[3].reg &= ~(PORT_PMUX_PMUXE_Msk);
+    PORT->Group[0].PMUX[3].reg |= PORT_PMUX_PMUXE_B; //ADC AIN[6]
+
+    REG_ADC_INPUTCTRL = (ADC_INPUTCTRL_MUXPOS_PIN6) | (ADC_INPUTCTRL_MUXNEG_IOGND);
+    while (REG_ADC_STATUS & ADC_STATUS_SYNCBUSY);
+
+    // V_REF setting
+    REG_ADC_REFCTRL = ADC_REFCTRL_REFSEL_INT1V;
+
+    // set average control
+    REG_ADC_AVGCTRL = ADC_AVGCTRL_SAMPLENUM_512;
+
+    // clear interrupt flag
+    REG_ADC_INTFLAG = ADC_INTFLAG_RESRDY;
+    
+    // enable freerun
+    REG_ADC_CTRLB = ADC_CTRLB_PRESCALER_DIV8 | ADC_CTRLB_FREERUN;
+
+    // enable ADC module
+    printf("ENABLE ADC module\n");
+    REG_ADC_CTRLA |= (ADC_CTRLA_ENABLE);
+    while (REG_ADC_STATUS & ADC_STATUS_SYNCBUSY);
+
+    printf("watching intflag\n");
+    while (1)
+    {
+        // value ready
+        if (REG_ADC_INTFLAG & ADC_INTFLAG_RESRDY)
+        {
+            // read value
+            uint16_t val = REG_ADC_RESULT;
+            printf("val1 %d\n", (val & 0xFF) | ((val >> 8)&0xFF));
+            printf("val2 %d\n", ((val >> 8)&0xFF) | (val & 0xFF));
+        //} else if (REG_ADC_INTFLAG & ADC_INTFLAG_SYNCRDY) {
+        //    REG_ADC_INTFLAG |= ADC_INTFLAG_SYNCRDY;
+        }
+        //printf("%lu\n", REG_ADC_INTFLAG & ADC_INTFLAG_RESRDY);
+    }
+
+}
+
 
 int main(void)
 {
@@ -182,10 +244,10 @@ int main(void)
     //       80% of the input to the boost chip, which is going to be ~5V when we are on Witricity power;
     //       Thus, we need to have the hamilton pin enable connecting the ENABLE pin to some higher voltage
     //       source, which will probably be the input
-    //rv = gpio_read(BOOST_ENABLE);
-    //printf("PA27 state: %d\n", rv);
-    //gpio_write(BOOST_ENABLE, 1);
-    //printf("Enabled BOOST chip");
+    rv = gpio_read(BOOST_ENABLE);
+    printf("PA27 state: %d\n", rv);
+    gpio_write(BOOST_ENABLE, 1);
+    printf("Enabled BOOST chip");
 
     rv = gpio_init(I2C_RESET, GPIO_OUT);
     if (rv != 0) {
@@ -224,7 +286,8 @@ int main(void)
 
     // TODO: put monitoring in one thread, put the actuation in another thread
     //monitoring();
-    cbe_demo();
+    //desk_demo();
+    test_adc();
 
     return 0;
 }
