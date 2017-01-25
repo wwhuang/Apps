@@ -135,7 +135,7 @@ void cbe_demo(void)
   // initialize timer
   xtimer_ticks32_t last_wakeup = xtimer_now();
   while (1) {
-        led_state = JP2 | JP3;
+        led_state = JP2 ;
         rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
         printf("Wrote %d bytes (%x)\n", rv, led_state);
         if (i2c_release(I2C_0)) {
@@ -163,6 +163,41 @@ void cbe_demo(void)
             printf("I2C release fail\n");
         }
         xtimer_periodic_wakeup(&last_wakeup, 10000000);
+  }
+}
+
+// method to read state of the device and report it out
+void desk_demo(void)
+{
+  // var declarations for monitoring
+  int rv;
+  uint8_t led_state = 0x01;
+  int waketime = 1000000;
+
+  // initialize timer
+  xtimer_ticks32_t last_wakeup = xtimer_now();
+  while (1) {
+        led_state = JP2 ;
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+        led_state = JP3;
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+        led_state = JP4;
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
   }
 }
 
@@ -201,7 +236,7 @@ void test_adc(void)
     REG_ADC_INTFLAG = ADC_INTFLAG_RESRDY;
     
     // enable freerun
-    REG_ADC_CTRLB = ADC_CTRLB_PRESCALER_DIV8 | ADC_CTRLB_FREERUN;
+    REG_ADC_CTRLB = ADC_CTRLB_PRESCALER_DIV8 | ADC_CTRLB_RESSEL_16BIT | ADC_CTRLB_FREERUN;
 
     // enable ADC module
     printf("ENABLE ADC module\n");
@@ -214,15 +249,20 @@ void test_adc(void)
         // value ready
         if (REG_ADC_INTFLAG & ADC_INTFLAG_RESRDY)
         {
+            while (REG_ADC_STATUS & ADC_STATUS_SYNCBUSY); // wait for sync
             // read value
             uint16_t val = REG_ADC_RESULT;
-            printf("val1 %d\n", (val & 0xFF) | ((val >> 8)&0xFF));
-            printf("val2 %d\n", ((val >> 8)&0xFF) | (val & 0xFF));
-        //} else if (REG_ADC_INTFLAG & ADC_INTFLAG_SYNCRDY) {
-        //    REG_ADC_INTFLAG |= ADC_INTFLAG_SYNCRDY;
+            printf("val1 %d\n", (val >> 8) | (val << 8));
+            printf("val2 %d\n", val);
         }
+        //printf("%x %x\n", REG_ADC_STATUS, REG_ADC_INTFLAG);
         //printf("%lu\n", REG_ADC_INTFLAG & ADC_INTFLAG_RESRDY);
     }
+    // remember to:
+    // - make debug
+    // - continue
+    // - delete breakpoints
+    // - jump main
 
 }
 
