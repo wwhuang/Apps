@@ -26,6 +26,7 @@
 #define BOOST_ENABLE       GPIO_PIN(PA, 27)
 #define I2C_RESET          GPIO_PIN(PA, 18)
 #define LOW_BATT_INDICATOR GPIO_PIN(PA, 19)
+#define FIELD_POWER_LED    GPIO_PIN(PA, 28)
 
 #define PE_ADDR 24
 #define PE_IN_REG 0x0
@@ -34,12 +35,14 @@
 #define PE_CFG_REG 0x3
 
 // Insole points
-#define JP1 (0x1)
-#define JP2 (0x1 << 1)
-#define JP3 (0x1 << 2)
-#define JP4 (0x1 << 3)
-#define JP5 (0x1 << 4)
-#define JP6 (0x1 << 5)
+//#define JP1 (0x1)
+#define JP1 (0x1 << 1)
+#define JP2 (0x1 << 2)
+#define JP3 (0x1 << 3)
+#define JP4 (0x1 << 4)
+#define JP5 (0x1 << 5)
+#define JP6 (0x1 << 6)
+#define JP7 (0x1 << 6)
 
 extern int _netif_config(int argc, char **argv);
 extern void send(char *addr_str, char *port_str, char *data, uint16_t datalen);
@@ -47,6 +50,41 @@ extern void start_server(char *port_str);
 #define MAIN_QUEUE_SIZE     (8)
 static msg_t _main_msg_queue[MAIN_QUEUE_SIZE];
 extern void handle_input_line(const shell_command_t *command_list, char *line);
+
+uint16_t field_adc_val;
+
+// thread for ADC monitoring
+char field_led_stack[THREAD_STACKSIZE_MAIN];
+void *field_led_thread(void *arg)
+{
+  int waketime = 1000000;
+  // initialize timer
+  xtimer_ticks32_t last_wakeup = xtimer_now();
+  while (1)
+  {
+      uint16_t val = field_adc_val;
+      if (val < 15000)
+      {
+        waketime = 1000000;
+      }
+      else if (val <= 22000)
+      {
+        waketime = 700000;
+      }
+      else if (val <= 30000)
+      {
+        waketime = 400000;
+      }
+      else
+      {
+        waketime = 1000;
+      }
+      printf("waketime %d\n", waketime);
+      // change duty cycle based on the field value
+      gpio_toggle(FIELD_POWER_LED);
+      xtimer_periodic_wakeup(&last_wakeup, waketime);
+  }
+}
 
 // method to read state of the device and report it out
 void monitoring(void)
@@ -167,7 +205,7 @@ void cbe_demo(void)
 }
 
 // method to read state of the device and report it out
-void desk_demo(void)
+void cycle_all(void)
 {
   // var declarations for monitoring
   int rv;
@@ -177,6 +215,13 @@ void desk_demo(void)
   // initialize timer
   xtimer_ticks32_t last_wakeup = xtimer_now();
   while (1) {
+        led_state = JP1;
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
         led_state = JP2 ;
         rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
         printf("Wrote %d bytes (%x)\n", rv, led_state);
@@ -198,13 +243,65 @@ void desk_demo(void)
             printf("I2C release fail\n");
         }
         xtimer_periodic_wakeup(&last_wakeup, waketime);
+        led_state = JP5;
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+        led_state = JP6;
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
   }
 }
 
-void test_adc(void)
+void cycle_pairs(void)
+{
+  // var declarations for monitoring
+  int rv;
+  uint8_t led_state = 0x01;
+  int waketime = 5000000;
+
+  // initialize timer
+  xtimer_ticks32_t last_wakeup = xtimer_now();
+  while (1) {
+        led_state = JP1 | JP2;
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+
+        led_state = JP3 | JP4;
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+
+        led_state = JP5 | JP5;
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+
+  }
+}
+
+char read_adc_stack[THREAD_STACKSIZE_MAIN];
+void *read_adc_thread(void *arg)
 {
     // default config?
-    REG_PM_APBCMASK |= PM_APBCMASK_ADC;    
+    REG_PM_APBCMASK |= PM_APBCMASK_ADC;
     REG_GCLK_CLKCTRL=(GCLK_CLKCTRL_CLKEN)|(GCLK_CLKCTRL_GEN_GCLK2)|(GCLK_CLKCTRL_ID_ADC);//4MHz
 
     // disable ADC module
@@ -234,7 +331,7 @@ void test_adc(void)
 
     // clear interrupt flag
     REG_ADC_INTFLAG = ADC_INTFLAG_RESRDY;
-    
+
     // enable freerun
     REG_ADC_CTRLB = ADC_CTRLB_PRESCALER_DIV8 | ADC_CTRLB_RESSEL_16BIT | ADC_CTRLB_FREERUN;
 
@@ -244,18 +341,25 @@ void test_adc(void)
     while (REG_ADC_STATUS & ADC_STATUS_SYNCBUSY);
 
     printf("watching intflag\n");
+
+    xtimer_ticks32_t last_wakeup = xtimer_now();
+    int waketime = 1000000;
     while (1)
     {
-        // value ready
-        if (REG_ADC_INTFLAG & ADC_INTFLAG_RESRDY)
+        while (1)
         {
-            while (REG_ADC_STATUS & ADC_STATUS_SYNCBUSY); // wait for sync
-            // read value
-            uint16_t val = REG_ADC_RESULT;
-            printf("val1 %d\n", (val >> 8) | (val << 8));
-            printf("val2 %d\n", val);
+            // value ready
+            if (REG_ADC_INTFLAG & ADC_INTFLAG_RESRDY)
+            {
+                while (REG_ADC_STATUS & ADC_STATUS_SYNCBUSY); // wait for sync
+                // read value
+                field_adc_val = REG_ADC_RESULT;
+                printf("val %d\n", field_adc_val);
+                break;
+            }
         }
         //printf("%x %x\n", REG_ADC_STATUS, REG_ADC_INTFLAG);
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
         //printf("%lu\n", REG_ADC_INTFLAG & ADC_INTFLAG_RESRDY);
     }
     // remember to:
@@ -324,10 +428,28 @@ int main(void)
         printf("I2C release fail\n");
     }
 
+    rv = gpio_init(FIELD_POWER_LED, GPIO_OUT);
+    if (rv != 0) {
+        printf("Could not init PA28 as output (%d)\n", rv);
+        return 1;
+    }
+    printf("Initialized PA28 as OUTPUT\n");
+    gpio_write(FIELD_POWER_LED, 0);
+
+    // start thread to do ADC measurements
+    thread_create(read_adc_stack, sizeof(read_adc_stack),
+                  THREAD_PRIORITY_MAIN-1, THREAD_CREATE_STACKTEST,
+                  read_adc_thread, NULL, "read_adc_thread");
+
+    // start thread to blink LED for the field
+    thread_create(field_led_stack, sizeof(field_led_stack),
+                  THREAD_PRIORITY_MAIN+1, THREAD_CREATE_STACKTEST,
+                  field_led_thread, NULL, "field_led_thread");
     // TODO: put monitoring in one thread, put the actuation in another thread
     //monitoring();
-    //desk_demo();
-    test_adc();
+    //cycle_all();
+    cycle_pairs();
+    //read_adc();
 
     return 0;
 }
