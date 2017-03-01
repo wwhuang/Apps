@@ -15,8 +15,16 @@
 #include <periph/i2c.h>
 #include <periph/adc.h>
 
-#define SAMPLE_INTERVAL ( 10000000UL)
-#define SAMPLE_JITTER   ( 2000000UL)
+
+
+#include "net/gnrc/netdev2.h"
+
+#include <periph/gpio.h>
+#include <periph/i2c.h>
+#include <periph/adc.h>
+
+#define SAMPLE_INTERVAL ( 2000000UL)
+#define SAMPLE_JITTER   ( 200000UL)
 
 #define MAG_ACC_TYPE_FIELD 5
 #define TEMP_TYPE_FIELD 6
@@ -37,6 +45,20 @@ void low_power_init(void) {
     gpio_write(GPIO_PIN(0, 19), 0);
 }
 
+void dutycycling_init(void) {
+	/* Leaf nodes: Low power operation and auto duty-cycling */
+    kernel_pid_t radio[GNRC_NETIF_NUMOF];
+    uint8_t radio_num = gnrc_netif_get(radio);
+	netopt_enable_t dutycycling;
+	if (DUTYCYCLE_SLEEP_INTERVAL) {
+	    dutycycling = NETOPT_ENABLE;
+	} else {
+	    dutycycling = NETOPT_DISABLE;
+	}
+	for (int i=0; i < radio_num; i++)
+	   	gnrc_netapi_set(radio[i], NETOPT_DUTYCYCLE, 0, &dutycycling, sizeof(netopt_t));
+}
+
 uint32_t interval_with_jitter(void)
 {
     int32_t t = SAMPLE_INTERVAL;
@@ -49,21 +71,18 @@ uint32_t interval_with_jitter(void)
 
 int main(void)
 {
-    netopt_state_t radio_state = NETOPT_STATE_SLEEP;
-
-    //This value is good randomness and unique per mote
     low_power_init();
-    kernel_pid_t radio[GNRC_NETIF_NUMOF];
-    uint8_t radio_num = gnrc_netif_get(radio);
-    while (1) {
+#if LEAF_NODE
+	dutycycling_init();
+#endif
+
+    while (1) { 
+      //Sleep
+      xtimer_usleep(interval_with_jitter());
+
       //Send
       char *msg = "helloworld ";
       send_udp("ff02::1",6060,(uint8_t*)&msg,10);
-      //Radio off
-      for (int i=0; i < radio_num; i++)
-        gnrc_netapi_set(radio[i], NETOPT_STATE, 0, &radio_state, sizeof(netopt_state_t));
-      //Sleep
-      xtimer_usleep(interval_with_jitter());
     }
 
     return 0;

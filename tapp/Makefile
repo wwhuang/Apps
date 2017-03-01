@@ -6,10 +6,11 @@ CFLAGS += -DRTT_STDIO_DISABLE_STDIN
 CFLAGS += -DSOCK_HAS_IPV6
 CFLAGS += -DTHREAD_STACKSIZE_DEFAULT=2048
 
+USEMODULE += xtimer
+USEMODULE += random
+
 # Radio
 USEMODULE += at86rf233
-
-USEMODULE += xtimer
 
 # networking
 USEMODULE += gnrc_netdev_default
@@ -17,6 +18,7 @@ USEMODULE += auto_init_gnrc_netif
 # Specify the mandatory networking modules for IPv6 and UDP
 USEMODULE += gnrc_ipv6
 USEMODULE += gnrc_udp
+USEMODULE += gnrc_dutymac
 # Add also the shell, some shell commands
 USEMODULE += netstats_l2
 USEMODULE += netstats_ipv6
@@ -26,7 +28,7 @@ USEMODULE += netstats_ipv6
 # development process:
 # CFLAGS += -DDEVELHELP
 
-DEFAULT_CHANNEL = 25
+DEFAULT_CHANNEL = 26
 CFLAGS += -DIEEE802154_DEFAULT_CHANNEL=$(DEFAULT_CHANNEL)
 
 QUIET ?= 1
