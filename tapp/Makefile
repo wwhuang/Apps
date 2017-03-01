@@ -27,6 +27,9 @@ USEMODULE += netstats_ipv6
 # which is not needed in a production environment but helps in the
 # development process:
 # CFLAGS += -DDEVELHELP
+CFLAGS += -DDUTYCYCLE_EN=1
+CFLAGS += -DLEAF_NODE=1
+CFLAGS += -DDUTYCYCLE_SLEEP_INTERVAL=0
 
 DEFAULT_CHANNEL = 26
 CFLAGS += -DIEEE802154_DEFAULT_CHANNEL=$(DEFAULT_CHANNEL)
