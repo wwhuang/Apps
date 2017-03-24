@@ -1,5 +1,0 @@
-speed 1000
-loadbin /home/hskim/Desktop/Apps/openthread_ex/bin/hamilton/openthread_posix_example.bin 0
-r
-g
-exit

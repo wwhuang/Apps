@@ -33,7 +33,7 @@
 
 #include <stdio.h>
 #include <rtt_stdio.h>
-#include "thread.h"
+//#include "thread.h"
 #include "xtimer.h"
 #include <string.h>
 

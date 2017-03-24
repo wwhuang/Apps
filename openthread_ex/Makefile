@@ -1,4 +1,4 @@
-APPLICATION = openthread_posix_example
+APPLICATION = openthread_example
 
 # If no BOARD is found in the environment, use this default:
 BOARD ?= hamilton
@@ -20,16 +20,16 @@ USEMODULE += tmp006
 USEMODULE += hdc1000
 USEMODULE += fxos8700
 
-USEMODULE += crypto
-USEMODULE += cipher_modes
+#USEMODULE += crypto
+#USEMODULE += cipher_modes
 
 USEMODULE += openthread
 USEMODULE += at86rf233
 
 USEMODULE += random
 
-USEMODULE += shell
-USEMODULE += shell_commands
+#USEMODULE += shell
+#USEMODULE += shell_commands
 USEMODULE += ps
 USEMODULE += ipv6_addr
 
