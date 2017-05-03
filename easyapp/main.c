@@ -6,12 +6,16 @@
 #include "phydat.h"
 #include "saul_reg.h"
 
+#define ENABLE_DEBUG    (0)
+#include "debug.h"
+
 #ifndef SAMPLE_INTERVAL
-#define SAMPLE_INTERVAL ( 5000000UL)
+#define SAMPLE_INTERVAL ( 50000000UL)
 #endif
 #define SAMPLE_JITTER   ( 200000UL)
 
 #define TYPE_FIELD 8
+
 
 void send_udp(char *addr_str, uint16_t port, uint8_t *data, uint16_t datalen);
 
@@ -66,20 +70,75 @@ saul_reg_t *sensor_button_t  = NULL;
 #define PROVIDED_FLAGS (0x7F)
 
 void critical_error(void) {
-  printf("CRITICAL ERROR, REBOOT\n");
+  DEBUG("CRITICAL ERROR, REBOOT\n");
   NVIC_SystemReset();
   return;
 }
 
 void sensor_config(void) {
     sensor_ambtemp_t = saul_reg_find_type(SAUL_SENSE_AMBTEMP);   
+		if (sensor_ambtemp_t == NULL) {
+			DEBUG("[ERROR] Failed to init AMBTEMP sensor\n");
+			critical_error();
+		} else {
+			DEBUG("AMBTEMP sensor OK\n");
+		}
+
     sensor_hum_t     = saul_reg_find_type(SAUL_SENSE_HUM);   
+    if (sensor_hum_t == NULL) {			
+			DEBUG("[ERROR] Failed to init HUM sensor\n");
+			critical_error();
+		} else {
+			DEBUG("HUM sensor OK\n");
+		}
+
     sensor_temp_t    = saul_reg_find_type(SAUL_SENSE_TEMP);   
+    if (sensor_temp_t == NULL) {
+			DEBUG("[ERROR] Failed to init TEMP sensor\n");
+			critical_error();
+		} else {
+			DEBUG("TEMP sensor OK\n");
+		}
+
     sensor_mag_t     = saul_reg_find_type(SAUL_SENSE_MAG);   
+    if (sensor_mag_t == NULL) {
+			DEBUG("[ERROR] Failed to init MAGNETIC sensor\n");
+			critical_error();
+		} else {
+			DEBUG("MAGNETIC sensor OK\n");
+		}
+
     sensor_accel_t   = saul_reg_find_type(SAUL_SENSE_ACCEL);  
+    if (sensor_accel_t == NULL) {
+			DEBUG("[ERROR] Failed to init ACCEL sensor\n");
+			critical_error();
+		} else {
+			DEBUG("ACCEL sensor OK\n");
+		}
+
     sensor_light_t   = saul_reg_find_type(SAUL_SENSE_LIGHT); 
-		sensor_occup_t   = saul_reg_find_type(SAUL_SENSE_OCCUP);
-		sensor_button_t  = saul_reg_find_type(SAUL_SENSE_BTN);
+		if (sensor_light_t == NULL) {
+			DEBUG("[ERROR] Failed to init LIGHT sensor\n");
+			critical_error();
+		} else {
+			DEBUG("LIGHT sensor OK\n");
+		}
+
+    sensor_occup_t   = saul_reg_find_type(SAUL_SENSE_OCCUP);
+		if (sensor_occup_t == NULL) {
+			DEBUG("[ERROR] Failed to init OCCUP sensor\n");
+			//critical_error();
+		} else {
+			DEBUG("OCCUP sensor OK\n");
+		}
+	
+    sensor_button_t  = saul_reg_find_type(SAUL_SENSE_BTN);
+		if (sensor_button_t == NULL) {
+			DEBUG("[ERROR] Failed to init BUTTON sensor\n");
+			critical_error();    
+		} else {
+			DEBUG("BUTTON sensor OK\n");
+		}
 }
 
 /* ToDo: Sampling sequence arrangement or thread/interrupt based sensing may be better 
@@ -89,55 +148,93 @@ void sample(ham7c_t *m) {
     phydat_t output; /* Sensor output data (maximum 3-dimension)*/
 		int dim;         /* Demension of sensor output */
 
-		/* Occupancy */
+		/* Occupancy 1-dim */
 		dim = saul_reg_read(sensor_occup_t, &output);
-		m->occup = output.val[0];
-    printf("\nDev: %s\tType: %s\n", sensor_occup_t->name, saul_class_to_str(sensor_occup_t->driver->type));
-		phydat_dump(&output, dim);
+		if (dim > 0) {
+			m->occup = output.val[0];
+		  printf("\nDev: %s\tType: %s\n", sensor_occup_t->name, 
+							saul_class_to_str(sensor_occup_t->driver->type));
+			phydat_dump(&output, dim);
+		} else {
+			DEBUG("[ERROR] Failed to read Occupancy\n");
+		}
 
-		/* Push button events */
+		/* Push button events 1-dim */
 		dim = saul_reg_read(sensor_button_t, &output); 
-		m->buttons = output.val[0];
-    printf("\nDev: %s\tType: %s\n", sensor_button_t->name, 
-						saul_class_to_str(sensor_button_t->driver->type));
-    phydat_dump(&output, dim);
+		if (dim > 0) {		
+			m->buttons = output.val[0];
+			printf("\nDev: %s\tType: %s\n", sensor_button_t->name, 
+							saul_class_to_str(sensor_button_t->driver->type));
+			phydat_dump(&output, dim);
+		} else {
+			DEBUG("[ERROR] Failed to read button events\n");
+		}
 
-		/* Ambient temperature */
+		/* Illumination 1-dim */
+		dim = saul_reg_read(sensor_light_t, &output);
+		if (dim > 0) {
+			m->light_lux = output.val[0];
+		  printf("\nDev: %s\tType: %s\n", sensor_light_t->name, 
+							saul_class_to_str(sensor_light_t->driver->type));
+			phydat_dump(&output, dim);
+		} else {
+			DEBUG("[ERROR] Failed to read Illumination\n");
+		}
+
+		/* Magnetic field 3-dim */
+		dim = saul_reg_read(sensor_mag_t, &output);
+		if (dim > 0) {
+			m->mag_x = output.val[0]; m->mag_y = output.val[1]; m->mag_z = output.val[2];
+			printf("\nDev: %s\tType: %s\n", sensor_mag_t->name, 
+							saul_class_to_str(sensor_mag_t->driver->type));
+			phydat_dump(&output, dim);
+		} else {
+			DEBUG("[ERROR] Failed to read magnetic field\n");
+		}
+
+		/* Acceleration 3-dim */
+		dim = saul_reg_read(sensor_accel_t, &output);			
+		if (dim > 0) {		
+			m->acc_x = output.val[0]; m->acc_y = output.val[1]; m->acc_z = output.val[2];
+		  printf("\nDev: %s\tType: %s\n", sensor_accel_t->name, 
+							saul_class_to_str(sensor_accel_t->driver->type));
+			phydat_dump(&output, dim);
+		} else {
+			printf("[ERROR] Failed to read Acceleration\n");
+		}
+
+		/* Ambient temperature 1-dim */
 		dim = saul_reg_read(sensor_ambtemp_t, &output); /* 500ms */
-		m->ambtemp = output.val[0];
-    printf("\nDev: %s\tType: %s\n", sensor_ambtemp_t->name, 
-						saul_class_to_str(sensor_ambtemp_t->driver->type));
-    phydat_dump(&output, dim);
+		if (dim > 0) {		 
+			m->ambtemp = output.val[0];
+		  printf("\nDev: %s\tType: %s\n", sensor_ambtemp_t->name, 
+							saul_class_to_str(sensor_ambtemp_t->driver->type));
+		  phydat_dump(&output, dim);
+		} else {
+			DEBUG("[ERROR] Failed to read Ambient Temperature\n");
+		}
 
-		/* Temperature */
+		/* Temperature 1-dim */
 		dim = saul_reg_read(sensor_temp_t, &output); /* 15ms */
-		m->temp = output.val[0];
-    printf("\nDev: %s\tType: %s\n", sensor_temp_t->name, saul_class_to_str(sensor_temp_t->driver->type));
-		phydat_dump(&output, dim);
-		
+		if (dim > 0) {		
+			m->temp = output.val[0];
+		  printf("\nDev: %s\tType: %s\n", sensor_temp_t->name, 
+							saul_class_to_str(sensor_temp_t->driver->type));
+			phydat_dump(&output, dim);
+		}	else {
+			DEBUG("[ERROR] Failed to read Temperature\n");
+		}
+
 		/* Humidity */
 		dim = saul_reg_read(sensor_hum_t, &output); /* 15ms */
-		m->hum = output.val[0];
-    printf("\nDev: %s\tType: %s\n", sensor_hum_t->name, saul_class_to_str(sensor_hum_t->driver->type));
-		phydat_dump(&output, dim);
-
-		/* Illumination */
-		dim = saul_reg_read(sensor_light_t, &output);
-		m->light_lux = output.val[0];
-    printf("\nDev: %s\tType: %s\n", sensor_light_t->name, saul_class_to_str(sensor_light_t->driver->type));
-		phydat_dump(&output, dim);
-
-		/* Magnetic field */
-		dim = saul_reg_read(sensor_mag_t, &output);
-		m->mag_x = output.val[0]; m->mag_y = output.val[1]; m->mag_z = output.val[2];
-    printf("\nDev: %s\tType: %s\n", sensor_mag_t->name, saul_class_to_str(sensor_mag_t->driver->type));
-		phydat_dump(&output, dim);
-
-		/* Acceleration */
-		dim = saul_reg_read(sensor_accel_t, &output);			
-		m->acc_x = output.val[0]; m->acc_y = output.val[1]; m->acc_z = output.val[2];
-    printf("\nDev: %s\tType: %s\n", sensor_accel_t->name, saul_class_to_str(sensor_accel_t->driver->type));
-		phydat_dump(&output, dim);
+		if (dim > 0) {		
+			m->hum = output.val[0];
+		  printf("\nDev: %s\tType: %s\n", sensor_hum_t->name, 
+							saul_class_to_str(sensor_hum_t->driver->type));
+			phydat_dump(&output, dim);
+		} else {
+			DEBUG("[ERROR] Failed to read Humidity\n");
+		}
 
 		/* Time from start */
     m->uptime = xtimer_usec_from_ticks64(xtimer_now64());
@@ -147,7 +244,7 @@ void sample(ham7c_t *m) {
     m->type   = TYPE_FIELD;
     m->flags  = PROVIDED_FLAGS;		
 		
-		puts("\n##########################\n");
+		puts("\n##########################");
 }
 
 uint32_t interval_with_jitter(void)
@@ -182,7 +279,7 @@ void crypto_init(void){
   //printf("\n");
   int rv = cipher_init(&aesc, CIPHER_AES_128, fb_aes128_key, 16);
   if (rv != CIPHER_INIT_SUCCESS) {
-    printf("failed to init cipher\n");
+    DEBUG("[ERROR] Failed to init Cipher\n");
     critical_error();
   }
 }
@@ -203,13 +300,13 @@ int main(void)
 
     while (1) {
       //Sample
-      LED_ON;
+      //LED_ON;
 			sample(&frontbuf);
-			LED_OFF;
+			//LED_OFF;
    	  
       //aes_populate();
       //Send
-      //send_udp("ff02::1",4747,obuffer,sizeof(obuffer));
+      send_udp("ff02::1",4747,obuffer,sizeof(obuffer));
 
       //Sleep
       xtimer_usleep(interval_with_jitter());
