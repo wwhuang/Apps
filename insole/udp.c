@@ -28,7 +28,7 @@
 #include "timex.h"
 #include "xtimer.h"
 
-static gnrc_netreg_entry_t server = { NULL, GNRC_NETREG_DEMUX_CTX_ALL, KERNEL_PID_UNDEF };
+//static gnrc_netreg_entry_t server = { NULL, GNRC_NETREG_DEMUX_CTX_ALL, KERNEL_PID_UNDEF };
 
 
 void send(char *addr_str, char *port_str, char *data, uint16_t datalen)
@@ -79,28 +79,28 @@ void send(char *addr_str, char *port_str, char *data, uint16_t datalen)
     //       addr_str, tmp);
 }
 
-void start_server(char *port_str)
-{
-    uint16_t port;
-
-    /* check if server is already running */
-    if (server.pid != KERNEL_PID_UNDEF) {
-        printf("Error: server already running on port %" PRIu32 "\n",
-               server.demux_ctx);
-        return;
-    }
-    /* parse port */
-    port = (uint16_t)atoi(port_str);
-    if (port == 0) {
-        puts("Error: invalid port specified");
-        return;
-    }
-    /* start server (which means registering pktdump for the chosen port) */
-    server.pid = gnrc_pktdump_pid;
-    server.demux_ctx = (uint32_t)port;
-    gnrc_netreg_register(GNRC_NETTYPE_UDP, &server);
-    printf("Success: started UDP server on port %" PRIu16 "\n", port);
-}
+//void start_server(char *port_str)
+//{
+//    uint16_t port;
+//
+//    /* check if server is already running */
+//    if (server.pid != KERNEL_PID_UNDEF) {
+//        printf("Error: server already running on port %" PRIu32 "\n",
+//               server.demux_ctx);
+//        return;
+//    }
+//    /* parse port */
+//    port = (uint16_t)atoi(port_str);
+//    if (port == 0) {
+//        puts("Error: invalid port specified");
+//        return;
+//    }
+//    /* start server (which means registering pktdump for the chosen port) */
+//    server.pid = gnrc_pktdump_pid;
+//    server.demux_ctx = (uint32_t)port;
+//    gnrc_netreg_register(GNRC_NETTYPE_UDP, &server);
+//    printf("Success: started UDP server on port %" PRIu16 "\n", port);
+//}
 
 //static void stop_server(void)
 //{
