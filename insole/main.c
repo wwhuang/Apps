@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <rtt_stdio.h>
 #include "shell.h"
 #include "thread.h"
@@ -55,65 +56,20 @@ uint16_t field_adc_val;
 
 int active = 1;
 
-// thread for ADC monitoring
-char field_led_stack[THREAD_STACKSIZE_MAIN];
-void *field_led_thread(void *arg)
+void set_led(int led_state)
 {
-  int waketime = 10000;
-  // initialize timer
-  xtimer_ticks32_t last_wakeup = xtimer_now();
-  while (1)
-  {
-      uint16_t val = field_adc_val;
-      //printf("val %d\n", val);
-      //  gpio_set(FIELD_POWER_LED);
-      if (val > 16000)
-      {
-        gpio_set(FIELD_POWER_LED);
-      }
-      else
-      {
-        gpio_clear(FIELD_POWER_LED);
-      }
-      //if (val > 30000)
-      //{
-      //  // turn LED on
-      //  waketime = 100000;
-      //  gpio_set(FIELD_POWER_LED);
-      //} else {
-      //  // otherwise, toggle
-      //  if (val < 200)
-      //  {
-      //    waketime = 100000;
-      //    gpio_clear(FIELD_POWER_LED);
-      //  }
-      //  else if (val < 15000)
-      //  {
-      //    waketime = 500000;
-      //    gpio_set(FIELD_POWER_LED);
-      //    xtimer_periodic_wakeup(&last_wakeup, 100000);
-      //    gpio_clear(FIELD_POWER_LED);
-      //  }
-      //  else if (val <= 22000)
-      //  {
-      //    waketime = 200000;
-      //    gpio_set(FIELD_POWER_LED);
-      //    xtimer_periodic_wakeup(&last_wakeup, 100000);
-      //    gpio_clear(FIELD_POWER_LED);
-      //  }
-      //  else if (val <= 30000)
-      //  {
-      //    waketime = 100000;
-      //    gpio_set(FIELD_POWER_LED);
-      //    xtimer_periodic_wakeup(&last_wakeup, 100000);
-      //    gpio_clear(FIELD_POWER_LED);
-      //  }
-      //  printf("waketime %d\n", waketime);
-      //  // change duty cycle based on the field value
-      //  //gpio_toggle(FIELD_POWER_LED);
-      //}
-      xtimer_periodic_wakeup(&last_wakeup, waketime);
-  }
+    if (active)
+    {
+        int rv;
+        if (i2c_acquire(I2C_0)) {
+            printf("I2C acquire fail\n");
+        }
+        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
+        printf("Wrote %d bytes (%x)\n", rv, led_state);
+        if (i2c_release(I2C_0)) {
+            printf("I2C release fail\n");
+        }
+    }
 }
 
 // thread for listening for radio commands
@@ -155,22 +111,21 @@ void *radio_thread(void *arg)
 }
 
 // method to read state of the device and report it out
-void monitoring(void)
+char monitoring_stack[THREAD_STACKSIZE_MAIN];
+void *monitoring(void *arg)
 {
   // var declarations for monitoring
   int low_battery_indicator = 0;
   int8_t acc_x,acc_y,acc_z;
+  int8_t old_acc_x = 0,old_acc_y = 0,old_acc_z = 0;
   int32_t temperature;
 
   int rv;
-  uint8_t led_state = 0x00;
-
+  int sleep = 10000;
+  int inactive_time = 0; // how long we've been inactive
+  int inactive_thresh = 1200000; // how long to wait before disabling
   // TODO: get this from some struct
   // 100,000 us = .1s
-  uint32_t period = 10000;
-  uint8_t duty_cycle = 50;
-  uint8_t sleep_amount = 100 - duty_cycle;
-  uint8_t to_actuate = (JP2 | JP3);
 
   // initialize sensors
   // temperature sensor
@@ -213,73 +168,69 @@ void monitoring(void)
         printf(" Accel x/y/z %d/%d/%d\n",acc_x, acc_y, acc_z);
         printf("-------\n");
 
-        if (i2c_acquire(I2C_0)) {
-            printf("I2C acquire fail\n");
+        //if (i2c_acquire(I2C_0)) {
+        //    printf("I2C acquire fail\n");
+        //}
+
+        int8_t diff = abs(old_acc_x - acc_x);
+        diff += abs(old_acc_y - acc_y);
+        diff += abs(old_acc_z - acc_z);
+
+        if(diff > 10){
+            active = 1; // turn on!
+            inactive_time = 0;
+            // want to disable if idle. This is on a really long timer
+            printf("Acc diff %d\n", diff);
+        } else if (active) {
+            // if active, start timer and siable
+            inactive_time = sleep;
+            active = 0;
+        } else {
+            inactive_time += sleep;
+            // already marked as inactive, and waiting
+        }
+        printf("Acc inactive %d\n", inactive_time);
+
+        if (inactive_time > inactive_thresh)
+        {
+            printf("Acc disabling");
+            active = 0;
+            if (i2c_acquire(I2C_0)) {
+                printf("I2C acquire fail\n");
+            }
+            rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, 0);
+            printf("Wrote %d bytes (%x)\n", rv, 0);
+            if (i2c_release(I2C_0)) {
+                printf("I2C release fail\n");
+            }
         }
 
-        led_state = to_actuate - led_state;
-        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
-        printf("Wrote %d bytes (%x)\n", rv, led_state);
-        if (i2c_release(I2C_0)) {
-            printf("I2C release fail\n");
-        }
-        sleep_amount = 100 - sleep_amount;
-        xtimer_periodic_wakeup(&last_wakeup, sleep_amount * period);
+        xtimer_periodic_wakeup(&last_wakeup, sleep);
+        old_acc_x = acc_x;
+        old_acc_y = acc_y;
+        old_acc_z = acc_z;
   }
 }
 
 // method to read state of the device and report it out
 void cycle_all(void)
 {
-  // var declarations for monitoring
-  int rv;
-  uint8_t led_state = 0x01;
   int waketime = 10000000;
 
   // initialize timer
   xtimer_ticks32_t last_wakeup = xtimer_now();
   while (1) {
-        led_state = JP1;
-        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
-        printf("Wrote %d bytes (%x)\n", rv, led_state);
-        if (i2c_release(I2C_0)) {
-            printf("I2C release fail\n");
-        }
+        set_led(JP1);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-        led_state = JP2 ;
-        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
-        printf("Wrote %d bytes (%x)\n", rv, led_state);
-        if (i2c_release(I2C_0)) {
-            printf("I2C release fail\n");
-        }
+        set_led(JP2);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-        led_state = JP3;
-        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
-        printf("Wrote %d bytes (%x)\n", rv, led_state);
-        if (i2c_release(I2C_0)) {
-            printf("I2C release fail\n");
-        }
+        set_led(JP3);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-        led_state = JP4;
-        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
-        printf("Wrote %d bytes (%x)\n", rv, led_state);
-        if (i2c_release(I2C_0)) {
-            printf("I2C release fail\n");
-        }
+        set_led(JP4);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-        led_state = JP5;
-        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
-        printf("Wrote %d bytes (%x)\n", rv, led_state);
-        if (i2c_release(I2C_0)) {
-            printf("I2C release fail\n");
-        }
+        set_led(JP5);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-        led_state = JP6;
-        rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
-        printf("Wrote %d bytes (%x)\n", rv, led_state);
-        if (i2c_release(I2C_0)) {
-            printf("I2C release fail\n");
-        }
+        set_led(JP6);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
   }
 }
@@ -640,21 +591,19 @@ int main(void)
                   THREAD_PRIORITY_MAIN-1, THREAD_CREATE_STACKTEST,
                   read_adc_thread, NULL, "read_adc_thread");
 
-    // start thread to blink LED for the field
-    thread_create(field_led_stack, sizeof(field_led_stack),
-                  THREAD_PRIORITY_MAIN+1, THREAD_CREATE_STACKTEST,
-                  field_led_thread, NULL, "field_led_thread");
-
     // start thread to listen for radio commands
-    thread_create(radio_stack, sizeof(radio_stack),
-                  THREAD_PRIORITY_MAIN+2, THREAD_CREATE_STACKTEST,
-                  radio_thread, NULL, "radio_thread");
+    //thread_create(radio_stack, sizeof(radio_stack),
+    //              THREAD_PRIORITY_MAIN+2, THREAD_CREATE_STACKTEST,
+    //              radio_thread, NULL, "radio_thread");
 
     // TODO: put monitoring in one thread, put the actuation in another thread
         //rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, JP6);
+    thread_create(monitoring_stack, sizeof(monitoring_stack),
+                THREAD_PRIORITY_MAIN+3, THREAD_CREATE_STACKTEST,
+                monitoring, NULL, "monitoring");
     //monitoring();
-    //cycle_all();
-    cycle_pairs();
+    cycle_all();
+    //cycle_pairs();
     //cycle_pairs4();
     //cycle_single();
     //dummy();
