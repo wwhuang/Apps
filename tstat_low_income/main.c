@@ -74,6 +74,7 @@
 #define SP_INC    GPIO_PIN(PA, 19)
 #define POWER    GPIO_PIN(PA, 24)
 #define TIMER    GPIO_PIN(PA, 25)
+#define PIR    GPIO_PIN(PA, 6)
 
 // constants
 #define TIMER_MAX (60*60*SECOND)
@@ -249,6 +250,8 @@ void button_press_setpoint_inc(void *arg) {
 void button_press_power(void *arg) {
     if (valid_press()) {
         printf("POWER\n");
+        NVIC_SystemReset();
+        return;
     }
 }
 
@@ -270,6 +273,20 @@ void button_press_timer(void *arg) {
         printf("TIMER now %"PRIu32"\n", timer);
         update_timer();
     }
+}
+
+void occupancy_trigger(void *arg) {
+    int r = gpio_read(PIR);
+    printf("OCC %d\n", r);
+    get_i2c_bus();
+    if (r) {
+        i2c_write_reg(I2C_0, LED_DRIVER_3, TLC59116_PWM6, 0xff);
+        i2c_write_reg(I2C_0, LED_DRIVER_3, TLC59116_PWM7, 0xff);
+    } else {
+        i2c_write_reg(I2C_0, LED_DRIVER_3, TLC59116_PWM6, 0x00);
+        i2c_write_reg(I2C_0, LED_DRIVER_3, TLC59116_PWM7, 0x00);
+    }
+    release_i2c_bus();
 }
 
 // method to read state of the device and report it out
@@ -374,6 +391,11 @@ int main(void)
     gpio_init_int(SP_INC, GPIO_IN_PU, GPIO_FALLING, (gpio_cb_t)button_press_setpoint_inc, 0);
     gpio_init_int(POWER, GPIO_IN_PU, GPIO_FALLING, (gpio_cb_t)button_press_power, 0);
     gpio_init_int(TIMER, GPIO_IN_PU, GPIO_FALLING, (gpio_cb_t)button_press_timer, 0);
+
+    // initialize occupancy sensor
+    //gpio_init(PIR, GPIO_IN);
+    gpio_irq_enable(PIR);
+    gpio_init_int(PIR, GPIO_IN_PD, GPIO_BOTH, (gpio_cb_t)occupancy_trigger, 0);
 
     thread_create(monitoring_stack, sizeof(monitoring_stack),
                 THREAD_PRIORITY_MAIN, THREAD_CREATE_STACKTEST,
