@@ -25,7 +25,7 @@
 #define SECOND (1000000U)
 //#define INTERVAL (10000000U)
 
-#define BOOST_ENABLE       GPIO_PIN(PA, 27)
+#define BOOST_ENABLE       GPIO_PIN(PA, 8)
 #define I2C_RESET          GPIO_PIN(PA, 18)
 #define LOW_BATT_INDICATOR GPIO_PIN(PA, 19)
 #define FIELD_POWER_LED    GPIO_PIN(PA, 28)
@@ -184,7 +184,9 @@ void *monitoring(void *arg)
         diff += abs(old_acc_z - acc_z);
 
         if(diff > 10){
-            active = 1; // turn on!
+            // turn on!
+            gpio_write(BOOST_ENABLE, 1);
+            active = 1;
             inactive_time = 0;
             // want to disable if idle. This is on a really long timer
             printf("Acc diff %d\n", diff);
@@ -206,6 +208,7 @@ void *monitoring(void *arg)
             if (i2c_release(I2C_0)) {
                 printf("I2C release fail\n");
             }
+            gpio_write(BOOST_ENABLE, 0);
         }
 
         old_acc_x = acc_x;
@@ -241,7 +244,7 @@ void cycle_all(void)
 
 void cycle_pairs(void)
 {
-  int waketime = 20*SECOND;
+  int waketime = 2*SECOND;
 
   // initialize timer
   xtimer_ticks32_t last_wakeup = xtimer_now();
@@ -251,6 +254,24 @@ void cycle_pairs(void)
         set_led(JP3 | JP4);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
         set_led(JP5 | JP6);
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+  }
+}
+
+void cycle_pairs4(void)
+{
+  int waketime = 4*SECOND;
+
+  // initialize timer
+  xtimer_ticks32_t last_wakeup = xtimer_now();
+  while (1) {
+        set_led(JP1);
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+        set_led(JP2);
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+        set_led(JP3);
+        xtimer_periodic_wakeup(&last_wakeup, waketime);
+        set_led(JP4);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
   }
 }
@@ -362,17 +383,12 @@ int main(void)
 
     rv = gpio_init(BOOST_ENABLE, GPIO_OUT);
     if (rv != 0) {
-        printf("Could not init PA27 as output (%d)\n", rv);
+        printf("Could not init PA08 as output (%d)\n", rv);
         return 1;
     }
-    printf("Initialized PA27 as OUTPUT\n");
-    // TODO: need to fix the BOOST chip enable: we can't use 3V from the hamilton to pull the
-    //       ENABLE pin high, becasue the ENABLE pin is only considered HIGH when it is at least
-    //       80% of the input to the boost chip, which is going to be ~5V when we are on Witricity power;
-    //       Thus, we need to have the hamilton pin enable connecting the ENABLE pin to some higher voltage
-    //       source, which will probably be the input
+    printf("Initialized PA08 as OUTPUT\n");
     rv = gpio_read(BOOST_ENABLE);
-    printf("PA27 state: %d\n", rv);
+    printf("PA08 state: %d\n", rv);
     gpio_write(BOOST_ENABLE, 1);
     printf("Enabled BOOST chip");
 
@@ -443,7 +459,8 @@ int main(void)
                 monitoring, NULL, "monitoring");
     //monitoring();
     //cycle_all();
-    cycle_pairs();
+    //cycle_pairs();
+    cycle_pairs4();
     //cycle_pairs4();
     //cycle_single();
     //dummy();
