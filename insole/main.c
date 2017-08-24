@@ -128,7 +128,7 @@ void *monitoring(void *arg)
   int rv;
   int sleep = SECOND; // 1 second
   int inactive_time = 0; // how long we've been inactive
-  int inactive_thresh = 300 * SECOND; // how long to wait before disabling
+  int inactive_thresh = 600 * SECOND; // how long to wait before disabling
 
   // initialize sensors
   // temperature sensor
@@ -194,7 +194,7 @@ void *monitoring(void *arg)
             // if active is ON, but we are not moving, then start the timer
             inactive_time += sleep;
         }
-        printf("Acc inactive %d\n", inactive_time);
+        printf("Acc inactive %d %d\n", inactive_time, inactive_thresh);
 
         if (inactive_time > inactive_thresh)
         {
@@ -265,14 +265,20 @@ void cycle_pairs4(void)
   // initialize timer
   xtimer_ticks32_t last_wakeup = xtimer_now();
   while (1) {
-        set_led(JP1);
+        set_led(JP1 | JP2);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-        set_led(JP2);
+        set_led(JP3 | JP4);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-        set_led(JP3);
+        set_led(0);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-        set_led(JP4);
-        xtimer_periodic_wakeup(&last_wakeup, waketime);
+        //set_led(JP1);
+        //xtimer_periodic_wakeup(&last_wakeup, waketime);
+        //set_led(JP2);
+        //xtimer_periodic_wakeup(&last_wakeup, waketime);
+        //set_led(JP3);
+        //xtimer_periodic_wakeup(&last_wakeup, waketime);
+        //set_led(JP4);
+        //xtimer_periodic_wakeup(&last_wakeup, waketime);
   }
 }
 
