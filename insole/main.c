@@ -269,9 +269,7 @@ void cycle_pairs4(void)
         xtimer_periodic_wakeup(&last_wakeup, waketime);
         set_led(JP3 | JP4);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-        set_led(0);
-        xtimer_periodic_wakeup(&last_wakeup, waketime);
-        //set_led(JP1);
+        //set_led(JP2);
         //xtimer_periodic_wakeup(&last_wakeup, waketime);
         //set_led(JP2);
         //xtimer_periodic_wakeup(&last_wakeup, waketime);
