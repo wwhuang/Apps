@@ -25,7 +25,7 @@
 #define SECOND (1000000U)
 //#define INTERVAL (10000000U)
 
-#define BOOST_ENABLE       GPIO_PIN(PA, 27)
+#define BOOST_ENABLE       GPIO_PIN(PA, 8)
 #define I2C_RESET          GPIO_PIN(PA, 18)
 #define LOW_BATT_INDICATOR GPIO_PIN(PA, 19)
 #define FIELD_POWER_LED    GPIO_PIN(PA, 28)
@@ -47,7 +47,6 @@
 #define JP4 (0x1 << 4)
 #define JP5 (0x1 << 5)
 #define JP6 (0x1 << 6)
-#define JP7 (0x1 << 6)
 
 extern int _netif_config(int argc, char **argv);
 extern void send(char *addr_str, char *port_str, char *data, uint16_t datalen);
@@ -233,6 +232,19 @@ void dummy(void)
   }
 }
 
+void wristpad(void)
+{
+  xtimer_ticks32_t last_wakeup = xtimer_now();
+  int waketime = 1000000;
+  set_led(JP6);
+  while (1)
+  {
+    xtimer_periodic_wakeup(&last_wakeup, waketime);
+    printf("LBO %d\n", gpio_read(LOW_BATT_INDICATOR));
+  }
+}
+
+
 char read_adc_stack[THREAD_STACKSIZE_MAIN];
 void *read_adc_thread(void *arg)
 {
@@ -363,7 +375,7 @@ int main(void)
 
     rv = gpio_init(BOOST_ENABLE, GPIO_OUT);
     if (rv != 0) {
-        printf("Could not init PA27 as output (%d)\n", rv);
+        printf("Could not init PA08 as output (%d)\n", rv);
         return 1;
     }
     printf("Initialized PA27 as OUTPUT\n");
@@ -373,7 +385,7 @@ int main(void)
     //       Thus, we need to have the hamilton pin enable connecting the ENABLE pin to some higher voltage
     //       source, which will probably be the input
     rv = gpio_read(BOOST_ENABLE);
-    printf("PA27 state: %d\n", rv);
+    printf("PA08 state: %d\n", rv);
     gpio_write(BOOST_ENABLE, 1);
     printf("Enabled BOOST chip");
 
@@ -459,6 +471,7 @@ int main(void)
     //cycle_pairs4();
     //cycle_single();
     dummy();
+    //wristpad();
     //read_adc();
 
     return 0;

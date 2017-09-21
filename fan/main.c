@@ -25,7 +25,7 @@
 #define SECOND (1000000U)
 //#define INTERVAL (10000000U)
 
-#define BOOST_ENABLE       GPIO_PIN(PA, 27)
+#define BOOST_ENABLE       GPIO_PIN(PA, 8)
 #define I2C_RESET          GPIO_PIN(PA, 18)
 #define LOW_BATT_INDICATOR GPIO_PIN(PA, 19)
 #define FIELD_POWER_LED    GPIO_PIN(PA, 28)
