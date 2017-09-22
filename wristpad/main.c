@@ -47,7 +47,6 @@
 #define JP4 (0x1 << 4)
 #define JP5 (0x1 << 5)
 #define JP6 (0x1 << 6)
-#define JP7 (0x1 << 6)
 
 extern int _netif_config(int argc, char **argv);
 extern void send(char *addr_str, char *port_str, char *data, uint16_t datalen);
@@ -59,6 +58,8 @@ extern void handle_input_line(const shell_command_t *command_list, char *line);
 uint16_t field_adc_val;
 
 int active = 1;
+int heat_state = 0;
+int cool_state = 0;
 
 void set_led(int led_state)
 {
@@ -122,13 +123,10 @@ void *monitoring(void *arg)
   // var declarations for monitoring
   int low_battery_indicator = 0;
   int8_t acc_x,acc_y,acc_z;
-  int8_t old_acc_x = 0,old_acc_y = 0,old_acc_z = 0;
   int32_t temperature;
 
   int rv;
   int sleep = SECOND; // 1 second
-  int inactive_time = 0; // how long we've been inactive
-  int inactive_thresh = 600 * SECOND; // how long to wait before disabling
 
   // initialize sensors
   // temperature sensor
@@ -179,42 +177,6 @@ void *monitoring(void *arg)
         //    printf("I2C acquire fail\n");
         //}
 
-        int8_t diff = abs(old_acc_x - acc_x);
-        diff += abs(old_acc_y - acc_y);
-        diff += abs(old_acc_z - acc_z);
-
-        if(diff > 10){
-            // turn on!
-            gpio_write(BOOST_ENABLE, 1);
-            active = 1;
-            inactive_time = 0;
-            // want to disable if idle. This is on a really long timer
-            printf("Acc diff %d\n", diff);
-        } else if (active) {
-            // if active is ON, but we are not moving, then start the timer
-            inactive_time += sleep;
-        }
-        printf("Acc inactive %d %d\n", inactive_time, inactive_thresh);
-
-        if (inactive_time > inactive_thresh)
-        {
-            printf("Acc disabling");
-            active = 0;
-            if (i2c_acquire(I2C_0)) {
-                printf("I2C acquire fail\n");
-            }
-            rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, 0);
-            printf("Wrote %d bytes (%x)\n", rv, 0);
-            if (i2c_release(I2C_0)) {
-                printf("I2C release fail\n");
-            }
-            gpio_write(BOOST_ENABLE, 0);
-        }
-
-        old_acc_x = acc_x;
-        old_acc_y = acc_y;
-        old_acc_z = acc_z;
-
         xtimer_periodic_wakeup(&last_wakeup, sleep);
   }
 }
@@ -244,7 +206,7 @@ void cycle_all(void)
 
 void cycle_pairs(void)
 {
-  int waketime = 2*SECOND;
+  int waketime = 20*SECOND;
 
   // initialize timer
   xtimer_ticks32_t last_wakeup = xtimer_now();
@@ -258,45 +220,30 @@ void cycle_pairs(void)
   }
 }
 
-void cycle_pairs4(void)
-{
-  int waketime = 4*SECOND;
-
-  // initialize timer
-  xtimer_ticks32_t last_wakeup = xtimer_now();
-  while (1) {
-        set_led(JP1 | JP2);
-        xtimer_periodic_wakeup(&last_wakeup, waketime);
-        set_led(JP3 | JP4);
-        xtimer_periodic_wakeup(&last_wakeup, waketime);
-        //set_led(JP2);
-        //xtimer_periodic_wakeup(&last_wakeup, waketime);
-        //set_led(JP2);
-        //xtimer_periodic_wakeup(&last_wakeup, waketime);
-        //set_led(JP3);
-        //xtimer_periodic_wakeup(&last_wakeup, waketime);
-        //set_led(JP4);
-        //xtimer_periodic_wakeup(&last_wakeup, waketime);
-  }
-}
-
 
 void dummy(void)
 {
   xtimer_ticks32_t last_wakeup = xtimer_now();
   int waketime = 1000000;
-  uint8_t led_state = JP1 | JP2 | JP3 | JP4 | JP5 | JP6;
-  int rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, led_state);
-  printf("Wrote %d bytes (%x)\n", rv, led_state);
-  if (i2c_release(I2C_0)) {
-      printf("I2C release fail\n");
-  }
   while (1)
   {
     xtimer_periodic_wakeup(&last_wakeup, waketime);
     printf("LBO %d\n", gpio_read(LOW_BATT_INDICATOR));
   }
 }
+
+void wristpad(void)
+{
+  xtimer_ticks32_t last_wakeup = xtimer_now();
+  int waketime = 1000000;
+  set_led(JP6);
+  while (1)
+  {
+    xtimer_periodic_wakeup(&last_wakeup, waketime);
+    printf("LBO %d\n", gpio_read(LOW_BATT_INDICATOR));
+  }
+}
+
 
 char read_adc_stack[THREAD_STACKSIZE_MAIN];
 void *read_adc_thread(void *arg)
@@ -378,6 +325,47 @@ void low_batt_trig(void *arg) {
     printf("LOW BATTERY!\n");
 }
 
+xtimer_ticks32_t last_press;
+void button_press_heat(void *arg) {
+    xtimer_ticks32_t press = xtimer_now();
+    xtimer_ticks32_t diff = xtimer_diff(press, last_press);
+    if (xtimer_usec_from_ticks(diff) > 2*SECOND)
+    {
+        printf("BUTTON PRESS HEAT\n");
+        last_press = press;
+        if (heat_state) {
+            set_led(0);
+            cool_state = 0;
+            heat_state = 0;
+        } else {
+            set_led(JP5);
+            cool_state = 0;
+            heat_state = 1;
+        }
+
+    }
+}
+
+void button_press_cool(void *arg) {
+    xtimer_ticks32_t press = xtimer_now();
+    xtimer_ticks32_t diff = xtimer_diff(press, last_press);
+    if (xtimer_usec_from_ticks(diff) > 2*SECOND)
+    {
+        printf("BUTTON PRESS COOL\n");
+        last_press = press;
+        if (cool_state) {
+            set_led(0);
+            cool_state = 0;
+            heat_state = 0;
+        } else {
+            set_led(JP6);
+            cool_state = 1;
+            heat_state = 0;
+        }
+    }
+}
+
+
 
 int main(void)
 {
@@ -390,7 +378,12 @@ int main(void)
         printf("Could not init PA08 as output (%d)\n", rv);
         return 1;
     }
-    printf("Initialized PA08 as OUTPUT\n");
+    printf("Initialized PA27 as OUTPUT\n");
+    // TODO: need to fix the BOOST chip enable: we can't use 3V from the hamilton to pull the
+    //       ENABLE pin high, becasue the ENABLE pin is only considered HIGH when it is at least
+    //       80% of the input to the boost chip, which is going to be ~5V when we are on Witricity power;
+    //       Thus, we need to have the hamilton pin enable connecting the ENABLE pin to some higher voltage
+    //       source, which will probably be the input
     rv = gpio_read(BOOST_ENABLE);
     printf("PA08 state: %d\n", rv);
     gpio_write(BOOST_ENABLE, 1);
@@ -440,11 +433,22 @@ int main(void)
     gpio_write(FIELD_POWER_LED, 1);
 
     gpio_init(D25, GPIO_OUT);
-    gpio_init(D27, GPIO_OUT);
-    gpio_init(D28, GPIO_OUT);
     gpio_write(D25, 0);
-    gpio_write(D27, 0);
-    gpio_write(D28, 0);
+
+    set_led(JP1);
+    set_led(JP5);
+
+    last_press = xtimer_now();
+    gpio_init_int(D27, GPIO_IN_PU, GPIO_FALLING, (gpio_cb_t)button_press_heat, 0);
+    gpio_irq_enable(D27);
+
+    gpio_init_int(D28, GPIO_IN_PU, GPIO_FALLING, (gpio_cb_t)button_press_cool, 0);
+    gpio_irq_enable(D28);
+
+    //gpio_init(D27, GPIO_OUT);
+    //gpio_init(D28, GPIO_OUT);
+    //gpio_write(D27, 0);
+    //gpio_write(D28, 0);
 
     // start thread to do ADC measurements
     thread_create(read_adc_stack, sizeof(read_adc_stack),
@@ -464,10 +468,10 @@ int main(void)
     //monitoring();
     //cycle_all();
     //cycle_pairs();
-    cycle_pairs4();
     //cycle_pairs4();
     //cycle_single();
-    //dummy();
+    dummy();
+    //wristpad();
     //read_adc();
 
     return 0;

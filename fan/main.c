@@ -128,7 +128,7 @@ void *monitoring(void *arg)
   int rv;
   int sleep = SECOND; // 1 second
   int inactive_time = 0; // how long we've been inactive
-  int inactive_thresh = 600 * SECOND; // how long to wait before disabling
+  int inactive_thresh = 300 * SECOND; // how long to wait before disabling
 
   // initialize sensors
   // temperature sensor
@@ -184,9 +184,7 @@ void *monitoring(void *arg)
         diff += abs(old_acc_z - acc_z);
 
         if(diff > 10){
-            // turn on!
-            gpio_write(BOOST_ENABLE, 1);
-            active = 1;
+            active = 1; // turn on!
             inactive_time = 0;
             // want to disable if idle. This is on a really long timer
             printf("Acc diff %d\n", diff);
@@ -194,7 +192,7 @@ void *monitoring(void *arg)
             // if active is ON, but we are not moving, then start the timer
             inactive_time += sleep;
         }
-        printf("Acc inactive %d %d\n", inactive_time, inactive_thresh);
+        printf("Acc inactive %d\n", inactive_time);
 
         if (inactive_time > inactive_thresh)
         {
@@ -208,7 +206,6 @@ void *monitoring(void *arg)
             if (i2c_release(I2C_0)) {
                 printf("I2C release fail\n");
             }
-            gpio_write(BOOST_ENABLE, 0);
         }
 
         old_acc_x = acc_x;
@@ -244,7 +241,7 @@ void cycle_all(void)
 
 void cycle_pairs(void)
 {
-  int waketime = 2*SECOND;
+  int waketime = 20*SECOND;
 
   // initialize timer
   xtimer_ticks32_t last_wakeup = xtimer_now();
@@ -255,28 +252,6 @@ void cycle_pairs(void)
         xtimer_periodic_wakeup(&last_wakeup, waketime);
         set_led(JP5 | JP6);
         xtimer_periodic_wakeup(&last_wakeup, waketime);
-  }
-}
-
-void cycle_pairs4(void)
-{
-  int waketime = 4*SECOND;
-
-  // initialize timer
-  xtimer_ticks32_t last_wakeup = xtimer_now();
-  while (1) {
-        set_led(JP1 | JP2);
-        xtimer_periodic_wakeup(&last_wakeup, waketime);
-        set_led(JP3 | JP4);
-        xtimer_periodic_wakeup(&last_wakeup, waketime);
-        //set_led(JP2);
-        //xtimer_periodic_wakeup(&last_wakeup, waketime);
-        //set_led(JP2);
-        //xtimer_periodic_wakeup(&last_wakeup, waketime);
-        //set_led(JP3);
-        //xtimer_periodic_wakeup(&last_wakeup, waketime);
-        //set_led(JP4);
-        //xtimer_periodic_wakeup(&last_wakeup, waketime);
   }
 }
 
@@ -297,6 +272,20 @@ void dummy(void)
     printf("LBO %d\n", gpio_read(LOW_BATT_INDICATOR));
   }
 }
+
+void dofan(void)
+{
+  xtimer_ticks32_t last_wakeup = xtimer_now();
+  int waketime = 1000000;
+  set_led(JP1);
+  while (1)
+  {
+    xtimer_periodic_wakeup(&last_wakeup, waketime);
+    printf("LBO %d\n", gpio_read(LOW_BATT_INDICATOR));
+    gpio_write(D27, gpio_read(LOW_BATT_INDICATOR));
+  }
+}
+
 
 char read_adc_stack[THREAD_STACKSIZE_MAIN];
 void *read_adc_thread(void *arg)
@@ -357,8 +346,6 @@ void *read_adc_thread(void *arg)
                 field_adc_val = REG_ADC_RESULT;
                 printf("val %d\n", field_adc_val);
                 gpio_write(D25, field_adc_val > 10000);
-                gpio_write(D27, field_adc_val > 10000);
-                gpio_write(D28, field_adc_val > 10000);
                 break;
             }
         }
@@ -387,12 +374,17 @@ int main(void)
 
     rv = gpio_init(BOOST_ENABLE, GPIO_OUT);
     if (rv != 0) {
-        printf("Could not init PA08 as output (%d)\n", rv);
+        printf("Could not init PA27 as output (%d)\n", rv);
         return 1;
     }
-    printf("Initialized PA08 as OUTPUT\n");
+    printf("Initialized PA27 as OUTPUT\n");
+    // TODO: need to fix the BOOST chip enable: we can't use 3V from the hamilton to pull the
+    //       ENABLE pin high, becasue the ENABLE pin is only considered HIGH when it is at least
+    //       80% of the input to the boost chip, which is going to be ~5V when we are on Witricity power;
+    //       Thus, we need to have the hamilton pin enable connecting the ENABLE pin to some higher voltage
+    //       source, which will probably be the input
     rv = gpio_read(BOOST_ENABLE);
-    printf("PA08 state: %d\n", rv);
+    printf("PA27 state: %d\n", rv);
     gpio_write(BOOST_ENABLE, 1);
     printf("Enabled BOOST chip");
 
@@ -458,13 +450,13 @@ int main(void)
 
     // TODO: put monitoring in one thread, put the actuation in another thread
         //rv = i2c_write_reg(I2C_0, PE_ADDR, PE_OUT_REG, JP6);
-    thread_create(monitoring_stack, sizeof(monitoring_stack),
-                THREAD_PRIORITY_MAIN+3, THREAD_CREATE_STACKTEST,
-                monitoring, NULL, "monitoring");
+    //thread_create(monitoring_stack, sizeof(monitoring_stack),
+    //            THREAD_PRIORITY_MAIN+3, THREAD_CREATE_STACKTEST,
+    //            monitoring, NULL, "monitoring");
     //monitoring();
     //cycle_all();
     //cycle_pairs();
-    cycle_pairs4();
+    dofan();
     //cycle_pairs4();
     //cycle_single();
     //dummy();
