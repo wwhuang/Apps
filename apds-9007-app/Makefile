@@ -1,4 +1,4 @@
-APPLICATION = hamilton_easyapp
+APPLICATION = hamilton_apds9007_easyapp
 RIOTBASE ?= /home/hskim/Desktop/rebase/RIOT-OS
 BOARD = hamilton
 
