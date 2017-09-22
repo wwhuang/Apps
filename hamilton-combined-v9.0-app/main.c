@@ -5,6 +5,8 @@
 #include "net/gnrc/udp.h"
 #include "phydat.h"
 #include "saul_reg.h"
+#include "periph/adc.h"
+#include "periph/dmac.h"
 #include "periph/timer.h"
 
 #define ENABLE_DEBUG    (1)
@@ -77,7 +79,7 @@ void critical_error(void) {
 }
 
 void sensor_config(void) {
-    sensor_radtemp_t = saul_reg_find_type(SAUL_SENSE_RADTEMP);   
+    sensor_radtemp_t = saul_reg_find_type(SAUL_SENSE_RADTEMP);
     if (sensor_radtemp_t == NULL) {
         DEBUG("[ERROR] Failed to init RADTEMP sensor\n");
         critical_error();
@@ -85,15 +87,15 @@ void sensor_config(void) {
         DEBUG("TEMP sensor OK\n");
     }
 
-    sensor_hum_t     = saul_reg_find_type(SAUL_SENSE_HUM);   
-    if (sensor_hum_t == NULL) {			
+    sensor_hum_t     = saul_reg_find_type(SAUL_SENSE_HUM);
+    if (sensor_hum_t == NULL) {
         DEBUG("[ERROR] Failed to init HUM sensor\n");
         critical_error();
     } else {
         DEBUG("HUM sensor OK\n");
     }
 
-    sensor_temp_t    = saul_reg_find_type(SAUL_SENSE_TEMP);   
+    sensor_temp_t    = saul_reg_find_type(SAUL_SENSE_TEMP);
     if (sensor_temp_t == NULL) {
 		DEBUG("[ERROR] Failed to init TEMP sensor\n");
 		critical_error();
@@ -101,7 +103,7 @@ void sensor_config(void) {
 		DEBUG("TEMP sensor OK\n");
 	}
 
-    sensor_mag_t     = saul_reg_find_type(SAUL_SENSE_MAG);   
+    sensor_mag_t     = saul_reg_find_type(SAUL_SENSE_MAG);
     if (sensor_mag_t == NULL) {
 		DEBUG("[ERROR] Failed to init MAGNETIC sensor\n");
 		critical_error();
@@ -109,7 +111,7 @@ void sensor_config(void) {
 		DEBUG("MAGNETIC sensor OK\n");
 	}
 
-    sensor_accel_t   = saul_reg_find_type(SAUL_SENSE_ACCEL);  
+    sensor_accel_t   = saul_reg_find_type(SAUL_SENSE_ACCEL);
     if (sensor_accel_t == NULL) {
 		DEBUG("[ERROR] Failed to init ACCEL sensor\n");
 		critical_error();
@@ -117,7 +119,7 @@ void sensor_config(void) {
 		DEBUG("ACCEL sensor OK\n");
 	}
 
-    sensor_light_t   = saul_reg_find_type(SAUL_SENSE_LIGHT); 
+    sensor_light_t   = saul_reg_find_type(SAUL_SENSE_LIGHT);
 	if (sensor_light_t == NULL) {
 		DEBUG("[ERROR] Failed to init LIGHT sensor\n");
 		critical_error();
@@ -132,11 +134,11 @@ void sensor_config(void) {
 	} else {
 		DEBUG("OCCUP sensor OK\n");
 	}
-	
+
     sensor_button_t  = saul_reg_find_type(SAUL_SENSE_BTN);
     if (sensor_button_t == NULL) {
         DEBUG("[ERROR] Failed to init BUTTON sensor\n");
-        critical_error();    
+        critical_error();
     } else {
         DEBUG("BUTTON sensor OK\n");
     }
@@ -151,7 +153,7 @@ void sample(ham7c_t *m) {
     dim = saul_reg_read(sensor_occup_t, &output);
     if (dim > 0) {
         m->occup = output.val[0];
-        printf("\nDev: %s\tType: %s\n", sensor_occup_t->name, 
+        printf("\nDev: %s\tType: %s\n", sensor_occup_t->name,
                 saul_class_to_str(sensor_occup_t->driver->type));
         phydat_dump(&output, dim);
     } else {
@@ -159,10 +161,10 @@ void sample(ham7c_t *m) {
     }
 
     /* Push button events 1-dim */
-    dim = saul_reg_read(sensor_button_t, &output); 
-    if (dim > 0) {		
+    dim = saul_reg_read(sensor_button_t, &output);
+    if (dim > 0) {
         m->buttons = output.val[0];
-        printf("\nDev: %s\tType: %s\n", sensor_button_t->name, 
+        printf("\nDev: %s\tType: %s\n", sensor_button_t->name,
                 saul_class_to_str(sensor_button_t->driver->type));
         phydat_dump(&output, dim);
     } else {
@@ -173,7 +175,7 @@ void sample(ham7c_t *m) {
 	dim = saul_reg_read(sensor_light_t, &output);
 	if (dim > 0) {
 		m->light_lux = output.val[0];
-		printf("\nDev: %s\tType: %s\n", sensor_light_t->name, 
+		printf("\nDev: %s\tType: %s\n", sensor_light_t->name,
 						saul_class_to_str(sensor_light_t->driver->type));
 		phydat_dump(&output, dim);
 	} else {
@@ -184,7 +186,7 @@ void sample(ham7c_t *m) {
     dim = saul_reg_read(sensor_mag_t, &output);
     if (dim > 0) {
         m->mag_x = output.val[0]; m->mag_y = output.val[1]; m->mag_z = output.val[2];
-        printf("\nDev: %s\tType: %s\n", sensor_mag_t->name, 
+        printf("\nDev: %s\tType: %s\n", sensor_mag_t->name,
                 saul_class_to_str(sensor_mag_t->driver->type));
         phydat_dump(&output, dim);
     } else {
@@ -192,10 +194,10 @@ void sample(ham7c_t *m) {
     }
 
     /* Acceleration 3-dim */
-    dim = saul_reg_read(sensor_accel_t, &output);			
-    if (dim > 0) {		
+    dim = saul_reg_read(sensor_accel_t, &output);
+    if (dim > 0) {
         m->acc_x = output.val[0]; m->acc_y = output.val[1]; m->acc_z = output.val[2];
-        printf("\nDev: %s\tType: %s\n", sensor_accel_t->name, 
+        printf("\nDev: %s\tType: %s\n", sensor_accel_t->name,
                 saul_class_to_str(sensor_accel_t->driver->type));
         phydat_dump(&output, dim);
     } else {
@@ -204,10 +206,10 @@ void sample(ham7c_t *m) {
 
     /* Radient temperature 1-dim */
     dim = saul_reg_read(sensor_radtemp_t, &output); /* 500ms */
-    if (dim > 0) {		 
+    if (dim > 0) {
         m->temp = output.val[0];
         m->radtemp = output.val[1];
-        printf("\nDev: %s\tType: %s\n", sensor_radtemp_t->name, 
+        printf("\nDev: %s\tType: %s\n", sensor_radtemp_t->name,
                 saul_class_to_str(sensor_radtemp_t->driver->type));
         phydat_dump(&output, dim);
     } else {
@@ -216,9 +218,9 @@ void sample(ham7c_t *m) {
 
     /* Temperature 1-dim */
     // dim = saul_reg_read(sensor_temp_t, &output); /* 15ms */
-    /*if (dim > 0) {		
+    /*if (dim > 0) {
         m->temp = output.val[0];
-        printf("\nDev: %s\tType: %s\n", sensor_temp_t->name, 
+        printf("\nDev: %s\tType: %s\n", sensor_temp_t->name,
                 saul_class_to_str(sensor_temp_t->driver->type));
         phydat_dump(&output, dim);
     } else {
@@ -227,9 +229,9 @@ void sample(ham7c_t *m) {
 
     /* Humidity 1-dim */
     dim = saul_reg_read(sensor_hum_t, &output); /* 15ms */
-    if (dim > 0) {		
+    if (dim > 0) {
         m->hum = output.val[0];
-        printf("\nDev: %s\tType: %s\n", sensor_hum_t->name, 
+        printf("\nDev: %s\tType: %s\n", sensor_hum_t->name,
                 saul_class_to_str(sensor_hum_t->driver->type));
         phydat_dump(&output, dim);
     } else {
@@ -242,8 +244,8 @@ void sample(ham7c_t *m) {
     /* Others */
     m->serial = *fb_device_id;
     m->type   = TYPE_FIELD;
-    m->flags  = PROVIDED_FLAGS;		
-		
+    m->flags  = PROVIDED_FLAGS;
+
     puts("\n##########################");
 }
 
@@ -284,7 +286,7 @@ void crypto_init(void) {
 	}
 }
 void aes_populate(void) {
-	cipher_encrypt_cbc(&aesc, iv, ((uint8_t*)&frontbuf) + AES_SKIP_START_BYTES, 
+	cipher_encrypt_cbc(&aesc, iv, ((uint8_t*)&frontbuf) + AES_SKIP_START_BYTES,
 					 sizeof(ham7c_t)-AES_SKIP_START_BYTES, &obuffer[AES_SKIP_START_BYTES]);
 	memcpy(obuffer, ((uint8_t*)&frontbuf), AES_SKIP_START_BYTES);
 }
@@ -295,6 +297,8 @@ int main(void) {
     srand(*((uint32_t*)fb_aes128_key));
     crypto_init();
     sensor_config();
+    dmac_init();
+    adc_set_dma_channel(0);
 	//uint16_t i = 0;
 	//uint16_t j = 0;
 	LED_OFF;
