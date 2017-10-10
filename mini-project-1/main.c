@@ -3,7 +3,12 @@
 #include "xtimer.h"
 #include <string.h>
 #include "saul_reg.h"
-
+// Sensor drivers. Should only need to touch these 2
+#include "tmp006.h"
+#include "tmp006_params.h"
+#include "apds9007.h"
+// RTC shit 
+#include "periph/rtt.h"
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
 
@@ -20,6 +25,13 @@ saul_reg_t *sensor_light_t   = NULL;
 saul_reg_t *sensor_occup_t   = NULL;
 saul_reg_t *sensor_button_t  = NULL;
 
+/* driver asks for both of these even though params is inside tmp006_t */ 
+tmp006_params_t tmpparams; 
+tmp006_t m_tmp; 
+
+apds9007_params_t apds_params;
+apds9007_t m_apds; 
+
 void critical_error(void) {
     DEBUG("CRITICAL ERROR, REBOOT\n");
     NVIC_SystemReset();
@@ -27,78 +39,72 @@ void critical_error(void) {
 }
 
 void sensor_config(void) {
-    sensor_radtemp_t = saul_reg_find_type(SAUL_SENSE_RADTEMP);
-    if (sensor_radtemp_t == NULL) {
-        DEBUG("[ERROR] Failed to init RADTEMP sensor\n");
-        critical_error();
-    } else {
-        DEBUG("TEMP sensor OK\n");
-    }
+    /* Configure the tmp006 */  
+    // tmpparams taken from TMP006_PARAMS_BOARD in hamilton periph config file
+    tmpparams.i2c = I2C_0;
+    tmpparams.addr = 0x44;
+    tmpparams.rate = TMP006_CONFIG_CR_AS2; 
+    m_tmp.p = tmpparams;
+    tmp006_init(&m_tmp, &tmpparams);
+    tmp006_set_standby(&m_tmp);
 
-    sensor_hum_t     = saul_reg_find_type(SAUL_SENSE_HUM);
-    if (sensor_hum_t == NULL) {
-        DEBUG("[ERROR] Failed to init HUM sensor\n");
-        critical_error();
-    } else {
-        DEBUG("HUM sensor OK\n");
-    }
+    /* taken from the hamilton periph config file */
+    apds_params.gpio = GPIO_PIN(PA,28); 
+    apds_params.adc  = ADC_PIN_PA08;
+    apds_params.res  = ADC_RES_16BIT;
+    m_apds.p = apds_params;
+    apds9007_set_idle(&m_apds);
+}
 
-    sensor_temp_t    = saul_reg_find_type(SAUL_SENSE_TEMP);
-    if (sensor_temp_t == NULL) {
-		DEBUG("[ERROR] Failed to init TEMP sensor\n");
-		critical_error();
-	} else {
-		DEBUG("TEMP sensor OK\n");
-	}
-
-    sensor_mag_t     = saul_reg_find_type(SAUL_SENSE_MAG);
-    if (sensor_mag_t == NULL) {
-		DEBUG("[ERROR] Failed to init MAGNETIC sensor\n");
-		critical_error();
-	} else {
-		DEBUG("MAGNETIC sensor OK\n");
-	}
-
-    sensor_accel_t   = saul_reg_find_type(SAUL_SENSE_ACCEL);
-    if (sensor_accel_t == NULL) {
-		DEBUG("[ERROR] Failed to init ACCEL sensor\n");
-		critical_error();
-	} else {
-		DEBUG("ACCEL sensor OK\n");
-	}
-
-    sensor_light_t   = saul_reg_find_type(SAUL_SENSE_LIGHT);
-	if (sensor_light_t == NULL) {
-		DEBUG("[ERROR] Failed to init LIGHT sensor\n");
-		critical_error();
-	} else {
-		DEBUG("LIGHT sensor OK\n");
-	}
-
-    sensor_occup_t   = saul_reg_find_type(SAUL_SENSE_OCCUP);
-	if (sensor_occup_t == NULL) {
-		DEBUG("[ERROR] Failed to init OCCUP sensor\n");
-		critical_error();
-	} else {
-		DEBUG("OCCUP sensor OK\n");
-	}
-
-    sensor_button_t  = saul_reg_find_type(SAUL_SENSE_BTN);
-    if (sensor_button_t == NULL) {
-        DEBUG("[ERROR] Failed to init BUTTON sensor\n");
-        critical_error();
-    } else {
-        DEBUG("BUTTON sensor OK\n");
-    }
+void m_rtt_cb(void *arg) {
+    
 }
 
 int main(void) {
-    uint16_t wakeup_count = 0;
-    sensor_config();
+
+    sensor_config(); // set up sensors 
+    rtt_init(); // set up the rtt
 
     while (1) {
-		xtimer_usleep(SAMPLE_INTERVAL);
-        printf("I am Alive! %u\n", wakeup_count++);
+        // Lets set the RTT to run on a 1s loop. 
+        uint32_t c = rtt_get_counter();
+        c += 32768; // alarm time should be 1 s in the future
+        rtt_set_alarm(c, m_rtt_cb, NULL); // lets set a 1s alarm that does nothing else
+
+        //LED_ON;
+
+        uint32_t apbcmask = 0;
+        PM->APBCMASK.reg = apbcmask; // don't need this clock
+
+        uint32_t apbamask = 0;
+        apbamask |= PM_APBAMASK_RTC;
+        apbamask |= PM_APBAMASK_PM;
+        apbamask |= PM_APBAMASK_SYSCTRL; 
+        PM->APBAMASK.reg = apbamask; 
+
+        uint32_t apbbmask = 0; 
+        apbbmask |= PM_APBBMASK_NVMCTRL; 
+        apbbmask |= PM_APBBMASK_DSU; 
+        apbbmask |= PM_APBBMASK_PORT; 
+        PM->APBBMASK.reg = apbbmask;
+
+        //xtimer_usleep(SAMPLE_INTERVAL); // this appears to be wired up to TIMER_1
+
+        // I ripped out the code from cpu.h in cortexm_common. Also, I do not disable all interrupts.
+        SCB->SCR |=  (SCB_SCR_SLEEPDEEP_Msk); // We go deep sleep!
+
+        PM->SLEEP.reg = 2; // set idle level for not going to deep sleep
+        //SCB->SCR &= ~(SCB_SCR_SLEEPDEEP_Msk); // we go not deep sleep (idle);
+        /* ensure that all memory accesses have completed and trigger sleeping */
+        __DSB();
+        __WFI(); // This is the actual lets go to sleep function
+        
+        // RTC is on page 224 in the data sheet 
+        // Generic Clock Controller is on page 90
+        // Power manager on page 112
+        // timers are page 568 
+        // Long story short, we should use an RTC to sleep for a full second. 
+		//xtimer_usleep(SAMPLE_INTERVAL); // this appears to be wired up to TIMER_1
     }
 
     return 0;
