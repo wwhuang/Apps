@@ -1,5 +1,6 @@
 APPLICATION = mini-project-1
-RIOTBASE ?= /home/hskim/Desktop/RIOT-OS
+#RIOTBASE ?= /Dropbox/Classes/cs294-144/RIOT-OS
+RIOTBASE ?= /Users/wwhuang/Dropbox/Classes/cs294-144/RIOT-OS
 BOARD = hamilton
 
 # System functions
@@ -10,8 +11,8 @@ CFLAGS    += -DRTT_STDIO_DISABLE_STDIN
 CFLAGS    += -DTHREAD_STACKSIZE_DEFAULT=2048
 
 # Sensors
-USEMODULE += saul_reg        # SAUL: sensor/actuator abstraction layer 
-USEMODULE += auto_init_saul  
+USEMODULE += saul_reg        # SAUL: sensor/actuator abstraction layer
+USEMODULE += auto_init_saul
 USEMODULE += tmp006          # ambient temperature
 USEMODULE += hdc1000         # humidity and temperature
 USEMODULE += fxos8700        # acceleration and magnetic field
@@ -19,24 +20,24 @@ USEMODULE += apds9007        # illumination
 USEMODULE += ekmb1101111     # pir-based occupancy
 USEMODULE += push_button     # simple button
 
-CFLAGS += -DAUTO_CSMA_EN=1 
+CFLAGS += -DAUTO_CSMA_EN=1
 
 # Radio
 USEMODULE += at86rf2xx
 CFLAGS    += -DIEEE802154_DEFAULT_CHANNEL=26
 
 # Network
-USEMODULE += gnrc_netdev_default
-USEMODULE += auto_init_gnrc_netif
-# MAC 
-USEMODULE += gnrc_netdev
+#USEMODULE += gnrc_netdev_default
+#USEMODULE += auto_init_gnrc_netif
+# MAC
+#USEMODULE += gnrc_netdev
 # Specify the mandatory networking modules for IPv6 and UDP
-USEMODULE += gnrc_ipv6
-USEMODULE += gnrc_udp
-CFLAGS    += -DSOCK_HAS_IPV6
+#USEMODULE += gnrc_ipv6
+#USEMODULE += gnrc_udp
+#CFLAGS    += -DSOCK_HAS_IPV6
 # Add also the shell, some shell commands
-USEMODULE += netstats_l2
-USEMODULE += netstats_ipv6
+#USEMODULE += netstats_l2
+#USEMODULE += netstats_ipv6
 
 
 # Comment this out to disable code in RIOT that does safety checking
