@@ -1,0 +1,224 @@
+I view this as a three step process: 
+
+1) Make sure the sensors are in sleep mode
+Usually accomplished by writing some sleep command or writing a bit 
+to some configuration register on the sensor. 
+
+2) Making sure the radio is off. 
+Depending on the default behavior of chip/riotos, radio could be on or running some 
+mac/routing protocol. 
+
+3) Putting the MCU to sleep. 
+This is usually a little more complicated. Have to make sure all the peripherals are turned off, 
+that clocks are correctly configured, and that the right PM mode is set before calling the WFI 
+command or whatever command is needed to go to sleep. Also have to make sure all the pins are 
+correctly configured, and that no pull ups are unneccssarily set. In fact, it's best if unconnected 
+pins are GND outputs. 
+
+
+1) The Sensors 
+Looks like drivers have been written for us, but I looked at the data sheets just to make sure I had a 
+general sense of what is going on. Also, why are the .h files not with the .c files for the drivers????
+
+
+TPM006 
+I2C based sensor. Has 2 MOD bits (bits 13 and 14 zero indexed) in the configuration register (02h). 
+Both bits should be set to 0. Looks like I send out the TPM006 addr on the i2c wire with the 
+R/W bit set to write (so low), followed by the registry address (02h), followed by the 
+registry value (all zeros looks like it should work). I2C address is pin selectable. Looks like 
+this one is powered up by default. 
+
+ADPS9007
+Only controlled by a SD pin. It says active high, which I take to mean that setting the pin 
+high should put it in shutdown mode. 
+
+HDC1080
+Another I2C sensor. Address is 1000000 (7 bits, last one is for R/W bit).Same deal as the TPM006. 
+First I write the address with the R/W bit set low, then I write the registry address, then the 
+value I want that registry address to be. Actually, this one looks like it should automatically 
+enter sleep mode. 
+
+FXOS8700
+I2C sensor with pin selectable address. Overall same deal as TPM006 and HDC1080. 
+In CTRL REG 1 I need to set the active bit to 0 to put the device in standby. 
+In CTRL REG 2 need ot make sure auto-sleep is disalbed and that the device is set to 
+low-power mode. In theory the sensor should be by default be in sleep mode. 
+
+
+2) Making sure the radio is off. 
+
+The radio code appears to be from at86rf233 in the drivers folder. The default setup appears to 
+put the radio into sleep mode. Also, the data sheet makes it look like once I go into deep sleep, 
+the radio will be forced off. 
+
+
+3) Getting the MCU to sleep 
+To be clear, I want STANDBY mode, which appears to be the deepest sleep mode. 
+Depending on the part of the data sheet, this is alternatly referred to as 
+SLEEPDEEP and DEEP_SLEEP, etc. 
+
+At first blush, I just call SCR.SLEEPDEEP = 1 and then the WFI command, after 
+turning off peripherals and clocks and the such. I also have to make sure 
+whatever timer I'm calling uses the RTC and that the RTC clock is kept awake. 
+
+So lets first deal with actually calling deepsleep. 
+There's some pm code in the samd11 folder that eventually goes down to 
+cortexm_sleep, which is in the cpu.h file in the cortexm_common folder. 
+cortexmsleep first sets some register bits based on SCB_SCR_SLEEPDEEP_Msk, which 
+for us is from core_cm0plus.h in the vendor folder. 
+
+We also call __disable_irq() and __DSB() before we call the WFI command. 
+DSB just makes sure we have completed all outstanding memory accesses. 
+Calling __disable_irq() is suspicious though, since I'm pretty sure this disables 
+all interrupts. I decided not to do this, since otherwise we can't be woken back up. 
+
+XTIMER
+Xtimer is wired up to TIMER_1, which is a timer module. It seems like the chip 
+can enter any sleep mode while keeping the timer modules on, but doing so 
+means needing to keep the timer modules' clocks going. Specifically, the 
+CLK_TCx_APB clocks, which I do not think can be wired to the 32 khz clock. 
+Thus, they will be fairly high powered. 
+
+RTC 
+Instead, we should probably use the rtc module. The RTT code treats the 
+RTC module as a low-power counter (yah!), so lets use this instead of rtc.c.  
+rtt.c defines an RTT_ISR, but I don't think this is set anywhere. 
+Verrryyy suspicious. It looks like like the RTC isr is actually a 
+weak function defined in vectors.c in cpu/samd21. Also, 
+The RTC assumes we have an external 32 khz crystal osc. Based on the 
+hamilton config files, this does not appear to be true, since 
+CLOCK_USE_PLL is set to 1 in periph_conf.h. 
+
+Also, TIMER_2 is set to point to RTT_DEV. RTT_DEV offers a different 
+interface than the regular timer modules. What's going on here.
+
+CLOCK MANAGMENT
+Well clocks are inited in cpu.c in the cpu/samd21 folder. It's a mess. 
+Hopefully this won't matter, since the plan is to shut down most 
+clocks. The power manager on the chip is responsible for turning off 
+clocks, but we don't seem to have code for this. Digging a little 
+deeper, there is a pm.h in cpu/sam0_common/include/vendor/samd21. 
+It appears that we have a mess of registers and no function to actually 
+disable/enable clocks. cpu.c also uses a bunch of structs like PM and GCLK, 
+and it's a mess to figure out where those are being defined since grepping for 
+stuff like "PM" turns up a billion different things. Eventually did find them 
+all though, but it's a bit weird they are in the vendor specific part of the 
+sam0_common folder rather than in the samd21 folder. 
+
+
+TESTING 
+
+First test is with shutting down the sensors and putting it in idle mode 2: 1.5 mA
+	- Interestingly this doesn't always work. Testing with LEDs shows that a lot fo 
+	times the node appears to keep restarting. It's not a WDT either, b/c if I remove 
+	the RTT code the led stays on, but if i keep the RTT code it toggles, indicating a reste. 
+	Also, trying to go to IDLE 2 w/o the Rtt never appears to result in low power. 
+Turning off sensors w/o any sleep code: 18 mA
+
+Okay, so w/o sleep it's reliably 19 mA, with sleep (IDLE 2) it's like 15 mA. 
+
+Second test: What if we just set XTIMER_DEV to point to TIMER_2, which is set to the 
+RTT. And enable TIMER_2 of course. In this case, current draw consistently 
+drops to 11.75 mA, but the program also hangs there. Okay, lets try making the isr_rtc 
+actually point to something. 
+
+Renamed the isr in the rtt file to isr_rtc. also renamed the isr in the rtc file to something else just to 
+be sure. At this point I also took all the networking stuff out of the makefile. I don't think xtimer_init 
+is actually being called anywhere.
+
+Okay, so without any timers enabled, the board now draws 5.7 mA at IDLE2. Interestingly reports the 
+same thing when trying to go into deep sleep. My guess is many clocks  are on. When I unplug 
+the JLINK the current drops to 2.68 mA. 
+
+Setting the apba/apbb/apbc masks gets me down to 462 uA in deep sleep. Still a bit high, but the right 
+ballpark. 
+
+Xtimer still freezing up. Went back to using RTT directly. Changed the rtt.c code to use the internal 32 khz oscillator instead of an 
+external one since we do not have an external crystal. Combined with the isr fix (renaming the rtt isr to 
+isr_rtc so it's actually used), things work! Average current draw is 463 uA with the node 
+waking up and going back to sleep. 
+
+so 462 uA: 
+- Manually calling RTT with it hooked up to the internal 32 khz osc 
+- Being fairly conservative with keeping clocks alive. Specifically, I was still keeping 
+  NVM_CTRL, DSU, and PORT alive in the APBBMASK and SYSCTRL alive in the APBAMASK. 
+
+Turning off all the clocks listed above (basically only keeping RTC and PM alive) and 
+switching the RTC to use the internal RC osc instead of the internal 32khz crystal buys 
+me about 10 uA to 453 uA. Most of this gain appears to be from turning off the SYSCTRL clock. 
+
+Tested turning off the AHB clocks. This appears to break the hamiltons. The power draw shoots up, 
+but more concerningly, when reprogrammed with the 453 uA code the power draw does not go back down, 
+even after a power cycling...
+	- MANY reprograms and power cycles later we're back!
+
+Tested turning off i2c. Does not make a difference.
+
+TURNING OFF THE RADIO
+- After looking at the data sheet, I believe the radio is in an idle state, rather than sleep or deep-sleep. 
+Although the at86rf2xx.c code makes it seem like we should be in a sleep state by settting state = AT86RF2XX_STATE_SLEEP, 
+in actuality I believe we are in AT86RF2XX_STATE_TRX_OFF or P_ON, which is neither the radio SLEEP state or the DEEP_SLEEP state. 
+Based on the AT86RF233 data sheet, I think we are in TRX_OFF mode (300 uA).
+	- Deep sleep is not implemented. 
+	- Fixed the initial state in the at86rf2xx_setup function to TRX_OFF.
+	- Called the __init inside at86rf2xx_netdev.c, which performs the GPIO setup. 
+		- I have all the netdev stuff disabled, otherwise this should be called at some point. 
+		  I tried re-enabling the netdev stuff, but this causes all sorts of power problems. 
+		- In general it feels like this init stuff should be in the main .c file, otherwise you 
+		  can't use the radio without the netdev stuff.
+    - Now calling at86rf2xx_setstate(sleep) puts us to sleep, but not deep sleep. 
+    - power draw down to average ~250 uA (current measurements shifting too quickly, see video)
+
+FINAL POWER DRAW: ~250 uA
+	- NOTE: You have to turn the PORT clock on in APBBMASK in the power manager module to get an led to flash. 
+	        Enabling the clock does not have a big effect on power, but the LED does. 
+	- ALSO: I futzed around with the code a bit, and now my current measurement tool believes I'm drawing < 1 uA, which 
+	        is not true. I think the machine has gotten into a state where it's mislabling the prefix 
+	        to A (e.g uA instead of mA), but in any case my exploration ends here.
+
+Speculation on issues: 
+1) I'm not doing anything to optimize pins. It's possible pull-ups are set or something. In general 
+unconnected pins should be in OUTPUT L with no pull-ups.
+2) Didn't futz too much with the sensors, so it's possible they aren't in the lowest power state. I 
+jus used the driver code.
+3) Some clocks may still be incorrectly configured. The rtt ticks->time conversion isn't exactly 
+what I expect. Also I didn't check if any of the drivers are creating GCLKs and leaving them on. 
+I also never did dive deeper into the AHB clock mask. 
+4) Radio is not in deep sleep. 
+
+Other thoughts: 
+
+1) This project needs a BOM. Otherwise it's a pain to figure out what is on the board. 
+2) It would also be really helpful to have a PDF of the schematic. Otherwise it's a hassle to 
+double check if pins are set correctly.
+3) The project should explicitly state that atmel chips have a table of contents at the end of the document. 
+4) I think the scope of the project is a little too large for a beginner. This project has sort of everything 
+wrong with sleep code. Overall, I think it's just a bit too much. In addition to needing to learn about how 
+everything works, the code is misleading, way behind the current RIOT-OS, and contains misleading comments.
+	1) xtimer is wired up to a high powered timer module 
+		- If you've never worked with MCUs before, have to do some digging to know this is bad, 
+		  especially since data sheets will tell you the timer module ran run during sleep mode
+	2) The config file is not set up to use the internal 32 khz crystal
+		- There's both a internal 32 khz crystal and an internal 32 khz rc osc
+		- The comments in the periph_conf.h file make it seem like you only get slight power gains from using the osc
+		- Data sheet seems to indicate that you should get pretty significant gains from using osc instead
+	3) rtt.c is the low power timer module you want, not rtc.c, even though both use the rtc module. 
+		- rtt.c is hardwired to use an external crystal 
+		- rtt.c has a comment that claims the internal crystal is too innaccurate to use, which is misleading 
+		- the rtt isr is misnamed, so it isn't actually wired in by the weak function system. 
+	4) The makefile contains a bunch of network modules, which seem to autostart. 
+	5) The RIOT-OS branch we have is way behind, making it hard to trust the documentaiton 
+	6) RIOT-OS documentaiton is limited. The xtimer documentation appears to be largely auto-generated
+	7) Things are hard to grep for. Some things are just named SYSCTRL and PM. Finding that stuff is a pain. 
+	8) If it's your first time with embedded, you're going to be surprised by a bunch of the C inside the code, 
+	   even though it is nicer than contiki. 
+	9) Weird division of code between cpu/sam0_common/include/endor/samd21 and the cpu/samd21 folders. Also random 
+	   stuff feels out of place, like xtimer being wired up in board.h instead of periph_config.h. 
+	10) Radio code is misleading, in that it leads to you to believe that the radio starts off in sleep mode, which it does not.
+
+
+
+
+
+
+
