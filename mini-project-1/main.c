@@ -11,6 +11,9 @@
 #include "periph/rtt.h"
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
+#include "periph/i2c.h"
+#include "at86rf2xx.h"
+#include "at86rf2xx_params.h"
 
 #ifndef SAMPLE_INTERVAL
 #define SAMPLE_INTERVAL ( 1000000UL)
@@ -31,6 +34,14 @@ tmp006_t m_tmp;
 
 apds9007_params_t apds_params;
 apds9007_t m_apds; 
+
+// Hm lets try and turn off the radio 
+at86rf2xx_t m_rf; 
+
+void rf_config(void) {
+    at86rf2xx_setup(&m_rf, &at86rf2xx_params[0]);
+    at86rf2xx_set_state(&m_rf, AT86RF2XX_STATE_SLEEP);
+}
 
 void critical_error(void) {
     DEBUG("CRITICAL ERROR, REBOOT\n");
@@ -57,36 +68,43 @@ void sensor_config(void) {
 }
 
 void m_rtt_cb(void *arg) {
-    
+    //LED_TOGGLE;
 }
 
 int main(void) {
 
     sensor_config(); // set up sensors 
     rtt_init(); // set up the rtt
+    i2c_poweroff(0); // no need for this anymore.
+    rf_config();
 
     while (1) {
         // Lets set the RTT to run on a 1s loop. 
         uint32_t c = rtt_get_counter();
-        c += 32768; // alarm time should be 1 s in the future
+        c += 70000; // alarm time should be 1 s in the future
         rtt_set_alarm(c, m_rtt_cb, NULL); // lets set a 1s alarm that does nothing else
 
         //LED_ON;
 
+        // Set up PM clock masks so that we shut down stuff we don't need 
         uint32_t apbcmask = 0;
         PM->APBCMASK.reg = apbcmask; // don't need this clock
 
         uint32_t apbamask = 0;
         apbamask |= PM_APBAMASK_RTC;
         apbamask |= PM_APBAMASK_PM;
-        apbamask |= PM_APBAMASK_SYSCTRL; 
+        //apbamask |= PM_APBAMASK_SYSCTRL; 
         PM->APBAMASK.reg = apbamask; 
 
         uint32_t apbbmask = 0; 
-        apbbmask |= PM_APBBMASK_NVMCTRL; 
-        apbbmask |= PM_APBBMASK_DSU; 
-        apbbmask |= PM_APBBMASK_PORT; 
+        //apbbmask |= PM_APBBMASK_NVMCTRL; 
+        //apbbmask |= PM_APBBMASK_DSU; 
+        //apbbmask |= PM_APBBMASK_PORT; 
         PM->APBBMASK.reg = apbbmask;
+
+        // Messing with AHBMASK does BAD things! Node semi-perminently enters a higher power state
+        //uint32_t ahbmask = PM_AHBMASK_RESETVALUE; // not quite sure why this overlaps with apbbmask
+        //PM->AHBMASK.reg = ahbmask;
 
         //xtimer_usleep(SAMPLE_INTERVAL); // this appears to be wired up to TIMER_1
 
