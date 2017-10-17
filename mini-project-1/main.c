@@ -68,7 +68,7 @@ void sensor_config(void) {
 }
 
 void m_rtt_cb(void *arg) {
-    //LED_TOGGLE;
+    LED_TOGGLE;
 }
 
 int main(void) {
@@ -99,7 +99,7 @@ int main(void) {
         uint32_t apbbmask = 0; 
         //apbbmask |= PM_APBBMASK_NVMCTRL; 
         //apbbmask |= PM_APBBMASK_DSU; 
-        //apbbmask |= PM_APBBMASK_PORT; 
+        apbbmask |= PM_APBBMASK_PORT; 
         PM->APBBMASK.reg = apbbmask;
 
         // Messing with AHBMASK does BAD things! Node semi-perminently enters a higher power state
